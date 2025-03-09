@@ -1,0 +1,6 @@
+fastapi[standard]
+pydantic-settings
+sse-starlette
+starlette-context
+PyYAML
+pydub

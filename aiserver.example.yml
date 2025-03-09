@@ -1,0 +1,24 @@
+server:
+  host: "127.0.0.1" # Listen address.
+  port: 8000 # Listen port.
+  public_host_url: "http://127.0.0.1:8000"
+
+models:
+  - model_name: "mistral-7b" # The model name to use for generating completions.
+    model_path: "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf" # The path to the model to use for generating completions.
+    n_gpu_layers: -1 # To offload all layers to gpu
+    backend: "llama"
+  - model_name: "nomic-embed-text"
+    model_path: "models/nomic-embed-text-v1.5.f16.gguf"
+    n_gpu_layers: -1
+    embedding: true
+    backend: "llama"
+  - model_path: "models/Stable-diffusion/dreamshaper_8.safetensors"
+    model_name: "dreamshaper-8"
+    backend: "stablediffusion"
+  - model_path: "models/audio/whisper-small-ggml.bin"
+    model_name: "whisper-1"
+    backend: "whisper"
+  - model_path: "models/audio/en_US-amy-medium.onnx"
+    model_name: "tts-1"
+    backend: "piper"

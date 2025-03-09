@@ -1,0 +1,5 @@
+llama-cpp-python --config-settings=cmake.args="-DGGML_CUDA=on"
+pywhispercpp @ git+https://github.com/absadiki/pywhispercpp.git@main --config-settings=cmake.args="-DGGML_CUDA=1" --config-settings="NO_REPAIR=1"
+stable_diffusion_cpp_python --config-settings=cmake.args="-DSD_CUDA=ON"
+piper-tts
+onnxruntime-gpu

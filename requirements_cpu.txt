@@ -1,0 +1,4 @@
+llama-cpp-python
+pywhispercpp
+piper-tts
+stable_diffusion_cpp_python

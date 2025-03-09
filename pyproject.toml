@@ -1,0 +1,17 @@
+[project]
+name = "aiserver"
+version = "0.1.0"
+description = "AI python server. Host your own AI models!"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115.8",
+    "llama-cpp-python>=0.3.7",
+    "onnxruntime-gpu>=1.20.1",
+    "piper-tts>=1.2.0",
+    "pydantic-settings>=2.8.0",
+    "pydub>=0.25.1",
+    "sse-starlette>=2.2.1",
+    "stable-diffusion-cpp-python>=0.2.5",
+    "starlette-context>=0.3.6",
+]
