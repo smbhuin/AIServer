@@ -192,8 +192,8 @@ If you have any feedback, or you want to share how you are using this project, f
 
 # Credits
 
-[llama-cpp-python](https://github.com/abetlen/llama-cpp-python)
-[openedai-images](https://github.com/matatonic/openedai-images)
+- [llama-cpp-python](https://github.com/abetlen/llama-cpp-python)
+- [openedai-images](https://github.com/matatonic/openedai-images)
 
 # License
 
