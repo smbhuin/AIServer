@@ -9,6 +9,10 @@ from settings import (
     WhisperModelSettings
 )
 
+from api_types import (
+    TranscriptionSegment
+)
+
 class WhisperWorker(ModelWorker):
     
     def __init__(self, model: WhisperModelSettings):
@@ -17,15 +21,15 @@ class WhisperWorker(ModelWorker):
             self._current_model_settings
         )
 
-    def transcribe(
+    def speech_to_text(
         self,
         file_path: str,
         translate: bool,
         **kwargs
-    ) -> List[str]:
+    ) -> List[TranscriptionSegment]:
         """ Transcribes. For translate as well."""
         segments = self._current_model.transcribe(media=file_path, translate=translate, **kwargs)
-        return list(map(lambda x: x.text, segments))
+        return list(map(lambda seg: TranscriptionSegment(start=seg.t0,end=seg.t1,text=seg.text), segments))
     
     def free(self):
         if self._current_model:

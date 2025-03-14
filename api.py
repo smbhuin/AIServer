@@ -29,7 +29,7 @@ from fastapi.routing import APIRoute
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.exceptions import RequestValidationError
 
 from fastapi.encoders import jsonable_encoder
@@ -53,6 +53,7 @@ from api_types import (
     CreateEmbeddingRequest,
     CreateEmbeddingResponse,
     CreateAudioTranscriptionResponse,
+    CreateAudioTranscriptionVerboseResponse,
     ModelList,
     TokenizeInputRequest,
     TokenizeInputResponse,
@@ -63,11 +64,13 @@ from api_types import (
     CreateSpeechResponse,
     CreateImageGenerationRequest,
     CreateImageGenerationResponse,
-    GeneratedImage
+    GeneratedImage,
+    TranscriptionSegment
 )
 
 from worker import ModelWorker
 from loader import ModelWorkerLoader
+import utils
 
 # Setup Bearer authentication scheme
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -93,7 +96,7 @@ def set_models_settings(models_settings: List[ModelSettings]):
     for m in models_settings:
         _model_loaders[m.model_name] = ModelWorkerLoader(m)
 
-def get_model_loader(requested_model: str, backend: str) -> ModelWorkerLoader:
+def get_model_loader(requested_model: str, backend: str, voice: Optional[str] = None) -> ModelWorkerLoader:
     if requested_model == None:
         loaders = [m for m in _model_loaders.values() if m.get_settings().backend == backend]
         if len(loaders) == 0:
@@ -102,6 +105,8 @@ def get_model_loader(requested_model: str, backend: str) -> ModelWorkerLoader:
                 detail="No suitable model found for the request.",
             )
         return loaders[0]
+    if voice is not None:
+        requested_model = f"{requested_model};{voice}"
     if requested_model not in _model_loaders:
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -527,7 +532,6 @@ async def tokenize(
         tokens = worker.tokenize(body)
         return TokenizeInputResponse(tokens=tokens)
 
-
 @router.post(
     "/extras/tokenize/count",
     summary="Tokenize Count",
@@ -565,9 +569,9 @@ async def transcription(
     model: Annotated[str, Form()] = None,
     prompt: Annotated[str, Form()] = None,
     response_format: Annotated[Literal["json", "text", "srt", "verbose_json", "vtt"], Form()] = "json",
-    temperature: Annotated[float, Form()] = 0.8,
+    temperature: Annotated[float, Form()] = 0.0,
     language: Annotated[str, Form()] = 'en'
-) -> CreateAudioTranscriptionResponse:
+):
     
     file_path = f"files/{uuid.uuid4()}_{file.filename}"
     kwargs = {
@@ -583,10 +587,18 @@ async def transcription(
         with open(file_path, "wb") as f:
             f.write(file.file.read())
         await check_connection(request)
-        texts = await run_in_threadpool(worker.transcribe, **kwargs)
-        return CreateAudioTranscriptionResponse(text="\n".join(texts))
-
-
+        segments = await run_in_threadpool(worker.speech_to_text, **kwargs)
+        if response_format == "text":
+            return utils.text_from(segments)
+        elif response_format == "srt":
+            return utils.srt_from(segments)
+        elif response_format == "vtt":
+            return utils.vtt_from(segments)
+        elif response_format == "verbose_json":
+            return CreateAudioTranscriptionVerboseResponse(text=utils.text_from(segments), segments=segments)
+        else:
+            return CreateAudioTranscriptionResponse(text=utils.text_from(segments))
+            
 @router.post(
     "/v1/audio/translations",
     summary="Translation",
@@ -598,8 +610,8 @@ async def translation(
     model: Annotated[str, Form()] = None,
     prompt: Annotated[str, Form()] = None,
     response_format: Annotated[Literal["json", "text", "srt", "verbose_json", "vtt"], Form()] = "json",
-    temperature: Annotated[float, Form()] = 0.8
-) -> CreateAudioTranscriptionResponse:
+    temperature: Annotated[float, Form()] = 0.0
+):
     file_path = f"files/{uuid.uuid4()}_{file.filename}"
     kwargs = {
         "file_path": file_path,
@@ -613,15 +625,24 @@ async def translation(
         with open(file_path, "wb") as f:
             f.write(file.file.read())
         await check_connection(request)
-        texts = await run_in_threadpool(worker.transcribe, **kwargs)
-        return CreateAudioTranscriptionResponse(text="\n".join(texts))
+        segments = await run_in_threadpool(worker.speech_to_text, **kwargs)
+        if response_format == "text":
+            return utils.text_from(segments)
+        elif response_format == "srt":
+            return utils.srt_from(segments)
+        elif response_format == "vtt":
+            return utils.vtt_from(segments)
+        elif response_format == "verbose_json":
+            return CreateAudioTranscriptionVerboseResponse(text=utils.text_from(segments), segments=segments)
+        else:
+            return CreateAudioTranscriptionResponse(text=utils.text_from(segments))
 
 @router.post(
     "/v1/audio/speech",
     summary="Speech",
     dependencies=[Depends(authenticate)]
 )
-async def createSpeech(
+async def create_speech(
     request: Request,
     body: CreateSpeechRequest
 ) -> CreateSpeechResponse:
@@ -639,7 +660,7 @@ async def createSpeech(
         "wav": "audio/wav",
         "pcm": "audio/pcm"
     }
-    loader = get_model_loader(body.model, ModelBackend.piper)
+    loader = get_model_loader(body.model, ModelBackend.piper, voice=body.voice)
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
         await run_in_threadpool(worker.synthesize, **kwargs)

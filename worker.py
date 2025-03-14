@@ -8,7 +8,8 @@ from api_types import (
     CreateCompletionRequest,
     CreateChatCompletionRequest,
     CreateAudioTranscriptionResponse,
-    CreateImageGenerationRequest
+    CreateImageGenerationRequest,
+    TranscriptionSegment
 )
 
 class ModelWorker:
@@ -49,11 +50,11 @@ class ModelWorker:
     ) -> List[Any]: # List[PIL.Image]
         pass
 
-    def transcribe(
+    def speech_to_text(
         self,
         file_path: str,
         translate: bool,
         **kwargs
-    ) -> List[str]:
+    ) -> List[TranscriptionSegment]:
         pass
 
