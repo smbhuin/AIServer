@@ -307,57 +307,6 @@ class CreateChatCompletionRequest(BaseModel):
         }
     }
 
-class EmbeddingUsage(BaseModel):
-    prompt_tokens: int
-    total_tokens: int
-
-class Embedding(BaseModel):
-    index: int
-    object: str
-    embedding: Union[List[float], List[List[float]]]
-
-class CreateTextEmbeddingResponse(BaseModel):
-    object: Literal["list"]
-    model: str
-    data: List[Embedding]
-    usage: EmbeddingUsage
-
-class CompletionLogprobs(BaseModel):
-    text_offset: List[int]
-    token_logprobs: List[Optional[float]]
-    tokens: List[str]
-    top_logprobs: List[Optional[Dict[str, float]]]
-
-class CompletionChoice(BaseModel):
-    text: str
-    index: int
-    logprobs: Optional[CompletionLogprobs]
-    finish_reason: Optional[Literal["stop", "length"]]
-
-class CompletionUsage(BaseModel):
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-
-class CreateTextCompletionResponse(BaseModel):
-    id: str = Field(
-        description="The generation Id."
-    )
-    object: Literal["text_completion"]
-    created: int = Field(
-        description="The creation time."
-    )
-    model: str = Field(
-        description="The model used."
-    )
-    choices: List[CompletionChoice] = Field(
-        description="The chices."
-    )
-    usage: Optional[CompletionUsage] = Field(
-        default=None,
-        description="The usage."
-    )
-
 class ChatCompletionTopLogprobToken(TypedDict):
     token: str
     logprob: float
@@ -589,10 +538,34 @@ class CreateImageGenerationResponse(BaseModel):
         description="The list of images generated."
     )
 
+class TranscriptionSegment(BaseModel):
+    start: int = Field(
+        default=0,
+        description="The start time."
+    )
+    end: int = Field(
+        default=0,
+        description="The end time."
+    )
+    text: str = Field(
+        default="",
+        description="The text."
+    )
+
 class CreateAudioTranscriptionResponse(BaseModel):
     text: str = Field(
         default="",
         description="The audio transription text."
+    )
+
+class CreateAudioTranscriptionVerboseResponse(BaseModel):
+    text: str = Field(
+        default="",
+        description="The audio transription text."
+    )
+    segments: List[TranscriptionSegment] = Field(
+        default=[],
+        description="The list of text segments."
     )
 
 # https://platform.openai.com/docs/api-reference/audio/createSpeech
