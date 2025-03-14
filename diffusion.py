@@ -43,7 +43,7 @@ class StableDiffusionWorker(ModelWorker):
         if request.size is not None:
             width, height = request.size.split('x')
             kwargs["width"] = int(width)
-            kwargs["width"] = int(height)
+            kwargs["height"] = int(height)
         return self._current_model.txt_to_img(**kwargs)
 
     def free(self):
