@@ -104,7 +104,7 @@ def get_model_loader(requested_model: str, backend: str, voice: Optional[str] = 
             )
         return loaders[0]
     if voice is not None:
-        requested_model = f"{requested_model};{voice}"
+        requested_model = f"{requested_model}:{voice}"
     if requested_model not in _model_loaders:
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

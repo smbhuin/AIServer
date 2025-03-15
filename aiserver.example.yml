@@ -19,6 +19,6 @@ models:
   - model_name: "whisper-1"
     model_path: "models/audio/whisper-small-ggml.bin"
     backend: "whisper"
-  - model_name: "tts-1;amy"
+  - model_name: "tts-1:amy" # model:voice
     model_path: "models/voices/en_US-amy-medium.onnx"
     backend: "piper"
