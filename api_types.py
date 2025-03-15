@@ -496,14 +496,14 @@ class CreateImageGenerationRequest(BaseModel):
         description="The prompt to generate image for."
     )
     model: Optional[str] = Field(
-        default=None, # "dall-e-2" / "dall-e-3"
+        default=None,
         description="The model to use for generating image."
     )
-    size: Optional[str] = Field(default="512x512", description="The size of the image to be generated in pixels.") # 256x256, 512x512, or 1024x1024 for dall-e-2. Must be one of 1024x1024, 1792x1024, or 1024x1792 for dall-e-3
-    quality: Optional[str] = Field(default="standard", description="The quality of the image to be generated.") # or hd
-    response_format: Optional[Literal['url','b64_json']] = Field(default="url", description="The response format. Valid values are 'url' or 'b64_json'.") # or b64_json
-    n: Optional[int] = Field(default=1, ge=1, le=10, description="The number of images to generate. 1-10") # 1-10, 1 only for dall-e-3
-    style: Optional[str] = Field(default="vivid", description="The image style. 'vivid' or 'natural'") # natural
+    size: Optional[str] = Field(default="512x512", description="The size of the image to be generated in pixels.") 
+    quality: Optional[Literal['standard','hd']] = Field(default="standard", description="The quality of the image to be generated.")
+    response_format: Optional[Literal['url','b64_json']] = Field(default="url", description="The response format. Valid values are 'url' or 'b64_json'.")
+    n: Optional[int] = Field(default=1, ge=1, le=10, description="The number of images to generate. 1-10")
+    style: Optional[Literal['vivid','natural']] = Field(default="vivid", description="The image style. 'vivid' or 'natural'")
     user: Optional[str] = Field(default=None)
 
     model_config = {
@@ -526,9 +526,13 @@ class GeneratedImage(BaseModel):
         default=None,
         description="The base64-encoded JSON of the generated image, if `response_format` is `b64_json`."
     )
+    revised_prompt: Optional[str] = Field(
+        default=None,
+        description="The prompt that was used to generate the image, if there was any revision to the prompt."
+    )
 
 
-class CreateImageGenerationResponse(BaseModel):
+class CreateImageResponse(BaseModel):
     created: int = Field(
         default=0,
         description="The time when image is generated."

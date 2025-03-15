@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import time
 import contextlib
-import base64
 from io import BytesIO
 
 from typing import List, Optional, Union, Dict, Annotated, Tuple, Callable, Coroutine, Any, Literal
@@ -63,12 +62,11 @@ from api_types import (
     CreateSpeechRequest,
     CreateSpeechResponse,
     CreateImageGenerationRequest,
-    CreateImageGenerationResponse,
-    GeneratedImage,
-    TranscriptionSegment
+    CreateImageResponse,
+    GeneratedImage
 )
 
-from worker import ModelWorker
+from worker import ModelWorker, ImageToImageRequest, TextToImageRequest, ImageResponse
 from loader import ModelWorkerLoader
 import utils
 
@@ -113,6 +111,12 @@ def get_model_loader(requested_model: str, backend: str, voice: Optional[str] = 
                 detail=f"The model `{requested_model}` does not exist.",
             )
     return _model_loaders[requested_model]
+
+def get_hosted_file_url(file_name: str) -> str:
+    server_settings = next(get_server_settings())
+    host = server_settings.host if server_settings.host != "0.0.0.0" else "localhost"
+    files_host_url = server_settings.public_host_url if server_settings.public_host_url != None else f"http://{host}:{server_settings.port}"
+    return files_host_url + f"/files/{file_name}"
 
 async def authenticate(
     settings: ServerSettings = Depends(get_server_settings),
@@ -499,26 +503,6 @@ async def create_chat_completion(
         return await run_in_threadpool(worker.create_chat_completion, request=body)
 
 
-@router.get(
-    "/v1/models",
-    summary="Models",
-    dependencies=[Depends(authenticate)]
-)
-async def get_models(
-) -> ModelList:
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": loader.get_settings().model_name,
-                "object": "model",
-                "owned_by": "me",
-                "permissions": [],
-            }
-            for loader in _model_loaders.values()
-        ],
-    }
-
 @router.post(
     "/extras/tokenize",
     summary="Tokenize",
@@ -646,7 +630,8 @@ async def create_speech(
     request: Request,
     body: CreateSpeechRequest
 ) -> CreateSpeechResponse:
-    file_path = f"files/{uuid.uuid4()}.{body.response_format}"
+    file_name = f"{uuid.uuid4()}.{body.response_format}"
+    file_path = "files/" + file_name
     kwargs = {
         "text": body.input,
         "file_path": file_path,
@@ -666,50 +651,101 @@ async def create_speech(
         await run_in_threadpool(worker.synthesize, **kwargs)
         if body.response_type == "content":
             return FileResponse(file_path, media_type=media_types[body.response_format])
-        base_url = get_public_host_url()
-        return CreateSpeechResponse(url=f"{base_url}/{file_path}")
-
-def get_public_host_url() -> str:
-    server_settings = next(get_server_settings())
-    host = server_settings.host if server_settings.host != "0.0.0.0" else "localhost"
-    return server_settings.public_host_url if server_settings.public_host_url != None else f"http://{host}:{server_settings.port}"
-
-def saved_image_url(image) -> str: # returns image url
-    base_url = get_public_host_url()
-    file_path = f"files/{uuid.uuid4()}.png"
-    image.save(file_path)
-    return f"{base_url}/{file_path}"
-
-def b64_image_str(image) -> str:
-    with BytesIO() as output_bytes:
-        image.save(output_bytes, format="PNG")
-        b64_data = base64.b64encode(output_bytes.getvalue())
-    return b64_data.decode()
+        return CreateSpeechResponse(url=get_hosted_file_url(file_name))
 
 @router.post(
     "/v1/images/generations",
-    summary="Image Generation",
+    summary="Create image",
+    description="Creates an image given a prompt.",
     dependencies=[Depends(authenticate)],
-    response_model=Union[
-        CreateImageGenerationResponse,
-        str,
-    ],
-    response_model_exclude_none=True,
+    response_model=CreateImageResponse,
+    response_model_exclude_none=True
 )
 async def create_image(
     request: Request,
     body: CreateImageGenerationRequest
-) -> CreateImageGenerationResponse:
+) -> CreateImageResponse:
     created_at = int(time.time())
     loader = get_model_loader(body.model, ModelBackend.stable_diffusion)
+    width, height = body.size.split('x')
+    kwargs: TextToImageRequest = {
+        "prompt": body.prompt,
+        "batch_count": body.n,
+        "width": int(width),
+        "height": int(height)
+    }
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
-        images = await run_in_threadpool(worker.create_image, request=body)
-        return CreateImageGenerationResponse(created=created_at, data=[
+        image_resp: ImageResponse = await run_in_threadpool(worker.txt_to_img, request=kwargs)
+        return CreateImageResponse(created=created_at, data=[
             GeneratedImage(
-                url= saved_image_url(image)
+                url= get_hosted_file_url(file_name=utils.save_image(image, path="files")) 
             ) if body.response_format == "url" else GeneratedImage(
-                b64_json=b64_image_str(image)
-            ) for image in images
+                b64_json=utils.b64_str_from(image)
+            ) for image in image_resp["images"]
         ])
 
+@router.post(
+    "/v1/images/edits",
+    summary="Create image edit",
+    description="Creates an edited or extended image given an original image and a prompt.",
+    dependencies=[Depends(authenticate)],
+    response_model=CreateImageResponse,
+    response_model_exclude_none=True
+)
+async def edit_image(
+    request: Request,
+    image: Annotated[bytes, File(description="The image to edit. Must be a valid PNG file, less than 4MB, and square. If mask is not provided, image must have transparency, which will be used as the mask.")],
+    prompt: Annotated[str, Form(
+        description="The prompt to generate image for."
+    )],
+    mask: Annotated[Optional[bytes], File(description="An additional image whose fully transparent areas (e.g. where alpha is zero) indicate where image should be edited. Must be a valid PNG file, less than 4MB, and have the same dimensions as image.")] = None,
+    model: Annotated[Optional[str], Form(
+        description="The model to use for generating image."
+    )] = None,
+    size: Annotated[Optional[str], Form(description="The size of the image to be generated in pixels.")] = "512x512",
+    response_format: Annotated[Optional[Literal['url','b64_json']], Form(description="The response format. Valid values are 'url' or 'b64_json'.")] = "url",
+    n: Annotated[Optional[int], Form(ge=1, le=10, description="The number of images to generate. 1-10")] = 1,
+    user: Annotated[Optional[str], Form()] = None,
+) -> CreateImageResponse:
+    created_at = int(time.time())
+    loader = get_model_loader(model, ModelBackend.stable_diffusion)
+    width, height = size.split('x')
+    kwargs: ImageToImageRequest = {
+        "image":image,
+        "mask_image":mask,
+        "prompt": prompt,
+        "batch_count": n,
+        "width": int(width),
+        "height": int(height)
+    }
+    async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
+        await check_connection(request)
+        image_resp: ImageResponse = await run_in_threadpool(worker.img_to_img, request=kwargs)
+        return CreateImageResponse(created=created_at, data=[
+            GeneratedImage(
+                url= get_hosted_file_url(file_name=utils.save_image(image, path="files")) 
+            ) if response_format == "url" else GeneratedImage(
+                b64_json=utils.b64_str_from(image)
+            ) for image in image_resp["images"]
+        ])
+
+@router.get(
+    "/v1/models",
+    summary="Models",
+    dependencies=[Depends(authenticate)]
+)
+async def get_models(
+) -> ModelList:
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": loader.get_settings().model_name,
+                "object": "model",
+                "owned_by": "me",
+                "permissions": [],
+            }
+            for loader in _model_loaders.values()
+        ],
+    }

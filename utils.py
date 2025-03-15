@@ -1,5 +1,9 @@
 from typing import List
 from api_types import TranscriptionSegment
+from PIL.Image import Image
+from io import BytesIO
+import base64
+import uuid
 
 def to_timestamp(t: int, separator=',') -> str:
     """
@@ -41,3 +45,14 @@ def srt_from(segments: List[TranscriptionSegment]) -> str:
 
 def text_from(segments: List[TranscriptionSegment]) -> str:
     return "\n".join(seg.text for seg in segments)
+
+def b64_str_from(image: Image) -> str:
+    with BytesIO() as output_bytes:
+        image.save(output_bytes, format="PNG")
+        b64_data = base64.b64encode(output_bytes.getvalue())
+    return b64_data.decode()
+
+def save_image(image: Image, path: str) -> str:
+    file_name = f"{uuid.uuid4()}.png"
+    image.save(f"{path}/{file_name}")
+    return file_name

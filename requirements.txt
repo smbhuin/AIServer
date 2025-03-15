@@ -4,3 +4,4 @@ sse-starlette
 starlette-context
 PyYAML
 pydub
+pillow>=10.2.0

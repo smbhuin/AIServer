@@ -1,19 +1,13 @@
 from __future__ import annotations
 
 from typing import List, Optional, Union, Callable
-from worker import ModelWorker
+from worker import ModelWorker, TextToImageRequest, ImageToImageRequest, ImageResponse
 from PIL import Image
-
+from io import BytesIO
 from stable_diffusion_cpp import StableDiffusion, SampleMethod
 
 from settings import (
     StableDiffusionModelSettings,
-)
-
-from api_types import (
-    CreateImageGenerationRequest,
-    CreateImageGenerationResponse,
-    GeneratedImage
 )
 
 class StableDiffusionWorker(ModelWorker):
@@ -24,27 +18,35 @@ class StableDiffusionWorker(ModelWorker):
             self._current_model_settings
         )
 
-    def create_image(
+    def txt_to_img(
         self,
-        request: CreateImageGenerationRequest
-    ) -> List[Image.Image]:
-        exclude = {
-            "size",
-            "model",
-            "quality",
-            "response_format",
-            "style",
-            "user",
-            "n"
-        }
-        kwargs = request.model_dump(exclude=exclude)
-        if request.n > 1:
-            kwargs["batch_count"] = request.n
-        if request.size is not None:
-            width, height = request.size.split('x')
-            kwargs["width"] = int(width)
-            kwargs["height"] = int(height)
-        return self._current_model.txt_to_img(**kwargs)
+        request: TextToImageRequest
+    ) -> ImageResponse:
+        imgs = self._current_model.txt_to_img(
+            prompt=request["prompt"],
+            width=request["width"],
+            height=request["height"],
+            batch_count=request["batch_count"]
+        )
+        return {"images": imgs}
+
+    def img_to_img(
+        self,
+        request: ImageToImageRequest
+    ) -> ImageResponse:
+        image = Image.open(BytesIO(request["image"]), formats=["PNG"])
+        mask_image = request["mask_image"]
+        if mask_image is not None:
+            mask_image = Image.open(BytesIO(mask_image), formats=["PNG"])
+        imgs = self._current_model.img_to_img(
+            image=image,
+            mask_image=mask_image,
+            prompt=request["prompt"],
+            width=request["width"],
+            height=request["height"],
+            batch_count=request["batch_count"]
+        )
+        return {"images": imgs}
 
     def free(self):
         if self._current_model:

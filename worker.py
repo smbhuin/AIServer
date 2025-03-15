@@ -1,5 +1,6 @@
 
-from typing import Any, List, Iterator
+from typing import Any, List, Iterator, TypedDict, Optional
+from PIL.Image import Image
 
 from api_types import (
     TokenizeInputRequest,
@@ -11,6 +12,23 @@ from api_types import (
     CreateImageGenerationRequest,
     TranscriptionSegment
 )
+
+class TextToImageRequest(TypedDict):
+    prompt: str
+    width: Optional[int]
+    height: Optional[int]
+    batch_count: Optional[int]
+
+class ImageToImageRequest(TypedDict):
+    image: bytes
+    mask_image: Optional[bytes]
+    prompt: str
+    width: Optional[int]
+    height: Optional[int]
+    batch_count: Optional[int]
+
+class ImageResponse(TypedDict):
+    images: List[Image]
 
 class ModelWorker:
 
@@ -44,10 +62,16 @@ class ModelWorker:
     ) -> str:
         pass
     
-    def create_image(
+    def txt_to_img(
         self,
-        request: CreateImageGenerationRequest
-    ) -> List[Any]: # List[PIL.Image]
+        request: TextToImageRequest
+    ) -> ImageResponse:
+        pass
+
+    def img_to_img(
+        self,
+        request: ImageToImageRequest
+    ) -> ImageResponse:
         pass
 
     def speech_to_text(
