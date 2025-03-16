@@ -1,11 +1,9 @@
-from __future__ import annotations
-
 from io import BytesIO
 from pydub import AudioSegment
 import wave
 
 from piper.voice import PiperVoice
-from worker import ModelWorker
+from worker import ModelWorker, TextToSpeechRequest
 
 from settings import (
     PiperModelSettings
@@ -22,23 +20,23 @@ class PiperWorker(ModelWorker):
             "mp3": "mp3",
             "aac": "adts",
             "pcm": "wav",
-            "aac": "adts",
             "wav": "wav",
             "flac": "flac"
         }
 
-    def synthesize(self, text: str, file_path: str, format: str) -> None:
+    def text_to_speech(self, request: TextToSpeechRequest) -> None:
         with BytesIO() as wav_io:
             with wave.open(wav_io, "wb") as wav_file:
                 wav_file.setframerate(self._current_model.config.sample_rate)
                 wav_file.setsampwidth(2)  # 16-bit
                 wav_file.setnchannels(1)  # mono
                 for audio_bytes in self._current_model.synthesize_stream_raw(
-                    text
+                    request["text"]
                 ):
                     wav_file.writeframes(audio_bytes)
+            output_format = self._audio_format_map[request["format"]]
             audio = AudioSegment(wav_io.getvalue(), sample_width=2, frame_rate=self._current_model.config.sample_rate, channels=1)
-            audio.export(file_path, format=self._audio_format_map[format])
+            audio.export(request["output_file"], format=output_format)
 
     def free(self):
         if self._current_model:

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 
 from typing import List, Optional, Union, Dict, Iterator, Any
@@ -40,10 +38,10 @@ class LlamaWorker(ModelWorker):
                 to_bias[str(input_id)] = score
         return to_bias
 
-    def create_completion(
+    def completion(
         self,
         request: CreateCompletionRequest
-    ) -> Any | Iterator[Any]:
+    ) -> Union[Any, Iterator[Any]]:
         exclude = {
             "n",
             "best_of",
@@ -72,10 +70,10 @@ class LlamaWorker(ModelWorker):
             **kwargs
         )
 
-    def create_chat_completion(
+    def chat_completion(
         self,
         request: CreateChatCompletionRequest
-    ) -> Any | Iterator[Any]:
+    ) -> Union[Any, Iterator[Any]]:
         exclude = {
             "n",
             "logit_bias_type",
@@ -103,7 +101,7 @@ class LlamaWorker(ModelWorker):
             **kwargs
         )
     
-    def create_embedding(
+    def embeddings(
         self,
         request: CreateEmbeddingRequest
     ) -> Any:

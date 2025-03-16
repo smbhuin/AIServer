@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 from typing import List, Optional, Union, Any
-from worker import ModelWorker
+from worker import ModelWorker, SpeechToTextRequest
 
 from pywhispercpp.model import Model as Whisper
 
@@ -23,12 +21,10 @@ class WhisperWorker(ModelWorker):
 
     def speech_to_text(
         self,
-        file_path: str,
-        translate: bool,
-        **kwargs
+        request: SpeechToTextRequest
     ) -> List[TranscriptionSegment]:
         """ Transcribes. For translate as well."""
-        segments = self._current_model.transcribe(media=file_path, translate=translate, **kwargs)
+        segments = self._current_model.transcribe(media=request["input_file"], translate=request["translate"])
         return list(map(lambda seg: TranscriptionSegment(start=seg.t0,end=seg.t1,text=seg.text), segments))
     
     def free(self):

@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import time
 import contextlib
-from io import BytesIO
+import os
 
-from typing import List, Optional, Union, Dict, Annotated, Tuple, Callable, Coroutine, Any, Literal
+from typing import List, Optional, Union, Dict, Annotated, Callable, Coroutine, Any, Literal
 from typing_extensions import TypedDict
 
 import uuid
@@ -66,7 +66,7 @@ from api_types import (
     GeneratedImage
 )
 
-from worker import ModelWorker, ImageToImageRequest, TextToImageRequest, ImageResponse
+from worker import ModelWorker, ImageToImageRequest, TextToImageRequest, ImageResponse, SpeechToTextRequest, TextToSpeechRequest
 from loader import ModelWorkerLoader
 import utils
 
@@ -254,7 +254,7 @@ def create_app(server_settings: ServerSettings, models_settings: List[ModelSetti
 async def get_event_publisher(
     request: Request,
     inner_send_chan: MemoryObjectSendStream[Any],
-    body: CreateCompletionRequest | CreateChatCompletionRequest,
+    body: Union[CreateCompletionRequest, CreateChatCompletionRequest],
     loader: ModelWorkerLoader,
 ):
     server_settings = next(get_server_settings())
@@ -264,7 +264,7 @@ async def get_event_publisher(
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         async with inner_send_chan:
             try:
-                func = worker.create_chat_completion if isinstance(body, CreateChatCompletionRequest) else worker.create_completion
+                func = worker.chat_completion if isinstance(body, CreateChatCompletionRequest) else worker.completion
                 iterator = await run_in_threadpool(func, request=body)
                 async for chunk in iterate_in_threadpool(iterator):
                     await inner_send_chan.send(dict(data=json.dumps(chunk)))
@@ -351,7 +351,7 @@ async def create_completion(
     # handle regular request
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
-        return await run_in_threadpool(worker.create_completion, request=body)
+        return await run_in_threadpool(worker.completion, request=body)
 
 
 @router.post(
@@ -365,7 +365,7 @@ async def create_embedding(
     loader = get_model_loader(body.model, ModelBackend.llama)
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         resp = await run_in_threadpool(
-            worker.create_embedding,
+            worker.embeddings,
             request=body,
         )
         return CreateEmbeddingResponse(**resp)
@@ -500,7 +500,7 @@ async def create_chat_completion(
     # handle regular request
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
-        return await run_in_threadpool(worker.create_chat_completion, request=body)
+        return await run_in_threadpool(worker.chat_completion, request=body)
 
 
 @router.post(
@@ -558,8 +558,8 @@ async def transcription(
 ):
     
     file_path = f"files/{uuid.uuid4()}_{file.filename}"
-    kwargs = {
-        "file_path": file_path,
+    kwargs: SpeechToTextRequest = {
+        "input_file": file_path,
         "translate":False,
         "language": language,
         "temperature": temperature
@@ -571,7 +571,8 @@ async def transcription(
         with open(file_path, "wb") as f:
             f.write(file.file.read())
         await check_connection(request)
-        segments = await run_in_threadpool(worker.speech_to_text, **kwargs)
+        segments = await run_in_threadpool(worker.speech_to_text, request=kwargs)
+        os.remove(file_path)
         if response_format == "text":
             return utils.text_from(segments)
         elif response_format == "srt":
@@ -597,8 +598,8 @@ async def translation(
     temperature: Annotated[float, Form()] = 0.0
 ):
     file_path = f"files/{uuid.uuid4()}_{file.filename}"
-    kwargs = {
-        "file_path": file_path,
+    kwargs: SpeechToTextRequest = {
+        "input_file": file_path,
         "translate":True,
         "temperature": temperature
     }
@@ -609,7 +610,8 @@ async def translation(
         with open(file_path, "wb") as f:
             f.write(file.file.read())
         await check_connection(request)
-        segments = await run_in_threadpool(worker.speech_to_text, **kwargs)
+        segments = await run_in_threadpool(worker.speech_to_text, request=kwargs)
+        os.remove(file_path)
         if response_format == "text":
             return utils.text_from(segments)
         elif response_format == "srt":
@@ -632,9 +634,9 @@ async def create_speech(
 ) -> CreateSpeechResponse:
     file_name = f"{uuid.uuid4()}.{body.response_format}"
     file_path = "files/" + file_name
-    kwargs = {
+    kwargs: TextToSpeechRequest = {
         "text": body.input,
-        "file_path": file_path,
+        "output_file": file_path,
         "format": body.response_format
     }
     media_types = {
@@ -648,7 +650,7 @@ async def create_speech(
     loader = get_model_loader(body.model, ModelBackend.piper, voice=body.voice)
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
-        await run_in_threadpool(worker.synthesize, **kwargs)
+        await run_in_threadpool(worker.text_to_speech, request=kwargs)
         if body.response_type == "content":
             return FileResponse(file_path, media_type=media_types[body.response_format])
         return CreateSpeechResponse(url=get_hosted_file_url(file_name))
@@ -672,7 +674,8 @@ async def create_image(
         "prompt": body.prompt,
         "batch_count": body.n,
         "width": int(width),
-        "height": int(height)
+        "height": int(height),
+        "upscale_factor": body.upscale_factor
     }
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)

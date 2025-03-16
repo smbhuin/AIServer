@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import List, Optional, Union, Dict, Any
 from typing_extensions import TypedDict, Literal, NotRequired
 
@@ -307,6 +305,41 @@ class CreateChatCompletionRequest(BaseModel):
         }
     }
 
+class CompletionLogprobs(TypedDict):
+    text_offset: List[int]
+    token_logprobs: List[Optional[float]]
+    tokens: List[str]
+    top_logprobs: List[Optional[Dict[str, float]]]
+
+class CompletionChoice(TypedDict):
+    text: str
+    index: int
+    logprobs: Optional[CompletionLogprobs]
+    finish_reason: Optional[Literal["stop", "length"]]
+
+class CompletionUsage(TypedDict):
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+
+class CreateCompletionResponse(TypedDict):
+    id: str
+    object: Literal["text_completion"]
+    created: int
+    model: str
+    choices: List[CompletionChoice]
+    usage: NotRequired[CompletionUsage]
+
+class ChatCompletionResponseFunctionCall(TypedDict):
+    name: str
+    arguments: str
+
+class ChatCompletionResponseMessage(TypedDict):
+    content: Optional[str]
+    tool_calls: NotRequired["ChatCompletionMessageToolCalls"]
+    role: Literal["assistant", "function"]  # NOTE: "function" may be incorrect here
+    function_call: NotRequired[ChatCompletionResponseFunctionCall]  # DEPRECATED
+
 class ChatCompletionTopLogprobToken(TypedDict):
     token: str
     logprob: float
@@ -340,14 +373,14 @@ class ChatCompletionResponseFunctionCall(TypedDict):
     name: str
     arguments: str
 
+class ChatCompletionMessageToolCallFunction(TypedDict):
+    name: str
+    arguments: str
+
 class ChatCompletionMessageToolCall(TypedDict):
     id: str
     type: Literal["function"]
     function: ChatCompletionMessageToolCallFunction
-
-class ChatCompletionMessageToolCallFunction(TypedDict):
-    name: str
-    arguments: str
 
 ChatCompletionMessageToolCalls = List[ChatCompletionMessageToolCall]
 
@@ -455,40 +488,6 @@ class CreateEmbeddingResponse(TypedDict):
     data: List[Embedding]
     usage: EmbeddingUsage
 
-class CompletionLogprobs(TypedDict):
-    text_offset: List[int]
-    token_logprobs: List[Optional[float]]
-    tokens: List[str]
-    top_logprobs: List[Optional[Dict[str, float]]]
-
-class CompletionChoice(TypedDict):
-    text: str
-    index: int
-    logprobs: Optional[CompletionLogprobs]
-    finish_reason: Optional[Literal["stop", "length"]]
-
-class CompletionUsage(TypedDict):
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-
-class CreateCompletionResponse(TypedDict):
-    id: str
-    object: Literal["text_completion"]
-    created: int
-    model: str
-    choices: List[CompletionChoice]
-    usage: NotRequired[CompletionUsage]
-
-class ChatCompletionResponseFunctionCall(TypedDict):
-    name: str
-    arguments: str
-
-class ChatCompletionResponseMessage(TypedDict):
-    content: Optional[str]
-    tool_calls: NotRequired["ChatCompletionMessageToolCalls"]
-    role: Literal["assistant", "function"]  # NOTE: "function" may be incorrect here
-    function_call: NotRequired[ChatCompletionResponseFunctionCall]  # DEPRECATED
 
 # Ref: https://platform.openai.com/docs/api-reference/images/create
 class CreateImageGenerationRequest(BaseModel):
@@ -504,7 +503,9 @@ class CreateImageGenerationRequest(BaseModel):
     response_format: Optional[Literal['url','b64_json']] = Field(default="url", description="The response format. Valid values are 'url' or 'b64_json'.")
     n: Optional[int] = Field(default=1, ge=1, le=10, description="The number of images to generate. 1-10")
     style: Optional[Literal['vivid','natural']] = Field(default="vivid", description="The image style. 'vivid' or 'natural'")
-    user: Optional[str] = Field(default=None)
+    user: Optional[str] = Field(default=None, description="A unique identifier representing your end-user, which can help monitor and detect abuse. Unimplemented.")
+    # Extra
+    upscale_factor: Optional[int] = Field(default=1, ge=1, le=10, description="The image upscaling factor. 1-10")
 
     model_config = {
         "json_schema_extra": {

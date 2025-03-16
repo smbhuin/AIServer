@@ -1,5 +1,5 @@
 
-from typing import Any, List, Iterator, TypedDict, Optional
+from typing import Any, List, Iterator, TypedDict, Optional, Literal, Union
 from PIL.Image import Image
 
 from api_types import (
@@ -8,8 +8,6 @@ from api_types import (
     CreateEmbeddingRequest,
     CreateCompletionRequest,
     CreateChatCompletionRequest,
-    CreateAudioTranscriptionResponse,
-    CreateImageGenerationRequest,
     TranscriptionSegment
 )
 
@@ -18,6 +16,7 @@ class TextToImageRequest(TypedDict):
     width: Optional[int]
     height: Optional[int]
     batch_count: Optional[int]
+    upscale_factor: Optional[int]
 
 class ImageToImageRequest(TypedDict):
     image: bytes
@@ -30,21 +29,33 @@ class ImageToImageRequest(TypedDict):
 class ImageResponse(TypedDict):
     images: List[Image]
 
+class SpeechToTextRequest(TypedDict):
+    input_file: str
+    prompt: Optional[str]
+    translate: bool
+    language: str
+    temperature: float
+
+class TextToSpeechRequest(TypedDict):
+    text: str
+    output_file: str
+    format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
+
 class ModelWorker:
 
-    def create_completion(
+    def completion(
         self,
         request: CreateCompletionRequest
-    ) -> Any | Iterator[Any]:
+    ) -> Union[Any, Iterator[Any]]:
         pass
 
-    def create_chat_completion(
+    def chat_completion(
         self,
         request: CreateChatCompletionRequest
-    ) -> Any | Iterator[Any]:
+    ) -> Union[Any, Iterator[Any]]:
         pass
 
-    def create_embedding(
+    def embeddings(
         self,
         request: CreateEmbeddingRequest
     ) -> Any:
@@ -76,9 +87,12 @@ class ModelWorker:
 
     def speech_to_text(
         self,
-        file_path: str,
-        translate: bool,
-        **kwargs
+        request: SpeechToTextRequest
     ) -> List[TranscriptionSegment]:
         pass
 
+    def text_to_speech(
+        self,
+        request: TextToSpeechRequest
+    ) -> None:
+        pass

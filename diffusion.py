@@ -1,6 +1,4 @@
-from __future__ import annotations
 
-from typing import List, Optional, Union, Callable
 from worker import ModelWorker, TextToImageRequest, ImageToImageRequest, ImageResponse
 from PIL import Image
 from io import BytesIO
@@ -26,7 +24,8 @@ class StableDiffusionWorker(ModelWorker):
             prompt=request["prompt"],
             width=request["width"],
             height=request["height"],
-            batch_count=request["batch_count"]
+            batch_count=request.get("batch_count",1),
+            upscale_factor=request.get("upscale_factor",1)
         )
         return {"images": imgs}
 

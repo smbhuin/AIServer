@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import multiprocessing
 
 from typing import Annotated, Optional, List, Literal, Tuple, Type, Union, Dict
@@ -353,7 +351,7 @@ class StableDiffusionModelSettings(ModelSettings):
     )
 
 ConfigModelSettings = Annotated[
-    LlamaModelSettings | WhisperModelSettings | StableDiffusionModelSettings | PiperModelSettings,
+    Union[LlamaModelSettings, WhisperModelSettings, StableDiffusionModelSettings, PiperModelSettings],
     Field(discriminator="backend")]
 
 class ConfigFileSettings(BaseSettings):
