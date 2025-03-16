@@ -62,13 +62,13 @@ class ModelWorker:
     ) -> str:
         pass
     
-    def txt_to_img(
+    def text_to_image(
         self,
         request: TextToImageRequest
     ) -> ImageResponse:
         pass
 
-    def img_to_img(
+    def image_to_image(
         self,
         request: ImageToImageRequest
     ) -> ImageResponse:

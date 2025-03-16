@@ -18,7 +18,7 @@ class StableDiffusionWorker(ModelWorker):
             self._current_model_settings
         )
 
-    def txt_to_img(
+    def text_to_image(
         self,
         request: TextToImageRequest
     ) -> ImageResponse:
@@ -30,7 +30,7 @@ class StableDiffusionWorker(ModelWorker):
         )
         return {"images": imgs}
 
-    def img_to_img(
+    def image_to_image(
         self,
         request: ImageToImageRequest
     ) -> ImageResponse:

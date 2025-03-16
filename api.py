@@ -676,7 +676,7 @@ async def create_image(
     }
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
-        image_resp: ImageResponse = await run_in_threadpool(worker.txt_to_img, request=kwargs)
+        image_resp: ImageResponse = await run_in_threadpool(worker.text_to_image, request=kwargs)
         return CreateImageResponse(created=created_at, data=[
             GeneratedImage(
                 url= get_hosted_file_url(file_name=utils.save_image(image, path="files")) 
@@ -721,7 +721,7 @@ async def edit_image(
     }
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
-        image_resp: ImageResponse = await run_in_threadpool(worker.img_to_img, request=kwargs)
+        image_resp: ImageResponse = await run_in_threadpool(worker.image_to_image, request=kwargs)
         return CreateImageResponse(created=created_at, data=[
             GeneratedImage(
                 url= get_hosted_file_url(file_name=utils.save_image(image, path="files")) 
