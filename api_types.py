@@ -4,7 +4,6 @@ from typing_extensions import TypedDict, Literal, NotRequired
 from pydantic import BaseModel, Field
 
 model_field = Field(
-    default=None,
     description="The model to use for generating completions."
 )
 
@@ -101,10 +100,10 @@ grammar = Field(
     description="A CBNF grammar (as string) to be used for formatting the model's output.",
 )
 
-
 class CreateCompletionRequest(BaseModel):
+    model: str = model_field
     prompt: Union[str, List[str]] = Field(
-        default="", description="The prompt to generate completions for."
+        description="The prompt to generate completions for."
     )
     suffix: Optional[str] = Field(
         default=None,
@@ -134,7 +133,6 @@ class CreateCompletionRequest(BaseModel):
     seed: Optional[int] = Field(None)
 
     # ignored or currently unsupported
-    model: Optional[str] = model_field
     n: Optional[int] = 1
     best_of: Optional[int] = 1
     user: Optional[str] = Field(default=None)
@@ -160,7 +158,7 @@ class CreateCompletionRequest(BaseModel):
     }
 
 class CreateEmbeddingRequest(BaseModel):
-    model: Optional[str] = model_field
+    model: str = model_field
     input: Union[str, List[str]] = Field(description="The input to embed.")
     user: Optional[str] = Field(default=None)
 
@@ -229,7 +227,7 @@ class ChatCompletionRequestResponseFormat(TypedDict):
 
 class CreateChatCompletionRequest(BaseModel):
     messages: List[ChatCompletionRequestMessage] = Field(
-        default=[], description="A list of messages to generate completions for."
+        description="A list of messages to generate completions for."
     )
     functions: Optional[List[ChatCompletionFunction]] = Field(
         default=None,
@@ -431,19 +429,18 @@ class CreateChatCompletionStreamResponse(TypedDict):
     created: int
     choices: List[ChatCompletionStreamResponseChoice]
 
+class ModelData(BaseModel):
+    id: str = Field(description="The model identifier, which can be referenced in the API endpoints.")
+    object: Literal["model"] = Field(description="The object type, which is always `model`.")
+    owned_by: str = Field(description="The organization that owns the model.")
+    permissions: List[str] = Field(description="The usage permission.")
 
-class ModelData(TypedDict):
-    id: str
-    object: Literal["model"]
-    owned_by: str
-    permissions: List[str]
-
-class ModelList(TypedDict):
-    object: Literal["list"]
-    data: List[ModelData]
+class ModelList(BaseModel):
+    object: Literal["list"] = Field(description="The object type, which is always `list`.")
+    data: List[ModelData] = Field(default=[], description="The list of models.")
 
 class TokenizeInputRequest(BaseModel):
-    model: Optional[str] = model_field
+    model: str = model_field
     input: str = Field(description="The input to tokenize.")
 
     model_config = {
@@ -461,7 +458,7 @@ class TokenizeInputCountResponse(BaseModel):
     model_config = {"json_schema_extra": {"example": {"count": 5}}}
 
 class DetokenizeInputRequest(BaseModel):
-    model: Optional[str] = model_field
+    model: str = model_field
     tokens: List[int] = Field(description="A list of toekns to detokenize.")
 
     model_config = {"json_schema_extra": {"example": [{"tokens": [123, 321, 222]}]}}
@@ -494,8 +491,7 @@ class CreateImageGenerationRequest(BaseModel):
     prompt: str = Field(
         description="The prompt to generate image for."
     )
-    model: Optional[str] = Field(
-        default=None,
+    model: str = Field(
         description="The model to use for generating image."
     )
     size: Optional[str] = Field(default="512x512", description="The size of the image to be generated in pixels.") 
@@ -576,7 +572,6 @@ class CreateAudioTranscriptionVerboseResponse(BaseModel):
 # https://platform.openai.com/docs/api-reference/audio/createSpeech
 class CreateSpeechRequest(BaseModel):
     model: str = Field(
-        default=None,
         description="The model to use for generating audio from text."
     )
     input: str = Field(

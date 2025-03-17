@@ -29,7 +29,7 @@ from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, PlainTextResponse
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import ValidationException, RequestValidationError
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.utils import is_body_allowed_for_status_code
@@ -54,6 +54,7 @@ from api_types import (
     CreateAudioTranscriptionResponse,
     CreateAudioTranscriptionVerboseResponse,
     ModelList,
+    ModelData,
     TokenizeInputRequest,
     TokenizeInputResponse,
     DetokenizeInputRequest,
@@ -137,7 +138,7 @@ async def authenticate(
         detail="Invalid API key",
     )
 
-class ErrorResponse(TypedDict):
+class ErrorMessage(TypedDict):
     """OpenAI style error response"""
 
     message: str
@@ -145,6 +146,8 @@ class ErrorResponse(TypedDict):
     param: Optional[str]
     code: Optional[str]
 
+class ErrorResponse(TypedDict):
+    error: ErrorMessage
 
 class AIServerRoute(APIRoute):
     """Custom APIRoute that handles application errors and exceptions"""
@@ -158,18 +161,46 @@ class AIServerRoute(APIRoute):
         original_route_handler = super().get_route_handler()
 
         async def custom_route_handler(request: Request) -> Response:
-            status_code = status.HTTP_400_BAD_REQUEST
-            error_message = None
             try:
                 start_sec = time.perf_counter()
                 response = await original_route_handler(request)
                 elapsed_time_ms = int((time.perf_counter() - start_sec) * 1000)
                 response.headers["openai-processing-ms"] = f"{elapsed_time_ms}"
                 return response
+            except HTTPException as exc:
+                headers = getattr(exc, "headers", None)
+                if not is_body_allowed_for_status_code(exc.status_code):
+                    return Response(status_code=exc.status_code, headers=headers)
+                error_types: Dict[int, str] = {
+                    400:"invalid_request_error",
+                    401:"authentication_error",
+                    404:"not_found_error"
+                }
+                err_msg = exc.detail
+                err_type = error_types.get(exc.status_code,"server_error")
+                err_code = exc.status_code
+            except RequestValidationError as exc:
+                headers = None
+                err_msg = "Your request was malformed or missing some required parameters."
+                err_type = "invalid_request_error"
+                err_code = status.HTTP_422_UNPROCESSABLE_ENTITY
             except Exception as exc:
-                raise exc
+                headers = None
+                err_msg = "The server had an error while processing your request."
+                err_type = "server_error"
+                err_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+            error_message: ErrorMessage = {
+                "message": err_msg,
+                "type": err_type,
+                "param": None,
+                "code": str(err_code)
+            }
+            return JSONResponse(
+                content={"error":error_message},
+                status_code=err_code,
+                headers=headers
+            )
         return custom_route_handler
-
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> Response:
     headers = getattr(exc, "headers", None)
@@ -180,29 +211,41 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
         401:"authentication_error",
         404:"not_found_error"
     }
-    error_message = ErrorResponse(
-        message=exc.detail,
-        type=error_types.get(exc.status_code,"server_error"),
-        param=None,
-        code=str(exc.status_code),
-    )
+    error_message: ErrorMessage = {
+        "message": exc.detail,
+        "type": error_types.get(exc.status_code,"server_error"),
+        "param": None,
+        "code": str(exc.status_code),
+    }
     return JSONResponse(
         {"error": error_message}, status_code=exc.status_code, headers=headers
     )
 
-async def request_validation_exception_handler(
-    request: Request, exc: RequestValidationError
+async def validation_exception_handler(
+    request: Request, exc: ValidationException
 ) -> JSONResponse:
-    error_message = ErrorResponse(
-        message="Your request was malformed or missing some required parameters.",
-        type="invalid_request_error",
-        param=None,
-        code=str(status.HTTP_422_UNPROCESSABLE_ENTITY),
-    )
+    code = status.HTTP_422_UNPROCESSABLE_ENTITY if isinstance(exc, RequestValidationError) else status.HTTP_500_INTERNAL_SERVER_ERROR
+    error_message: ErrorMessage = {
+        "message": "Your request was malformed or missing some required parameters.",
+        "type": "invalid_request_error",
+        "param": None,
+        "code": str(code)
+    }
     return JSONResponse(
-        content={"error":error_message, "detail": jsonable_encoder(exc.errors())},
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
+        content={"error":error_message}, # "detail": jsonable_encoder(exc.errors())
+        status_code=code
     )
+
+_responses = {
+    404: {
+        "model": ErrorResponse,
+        "description": "Item not found"
+    },
+    422: {
+        "model": ErrorResponse,
+        "description": "Validation Error"
+    },
+}
 
 async def check_connection(request: Request):
     if await request.is_disconnected():
@@ -233,8 +276,8 @@ def create_app(server_settings: ServerSettings, models_settings: List[ModelSetti
         root_path=server_settings.root_path,
     )
 
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+    # app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    # app.add_exception_handler(ValidationException, validation_exception_handler)
 
     app.add_middleware(
         CORSMiddleware,
@@ -288,7 +331,24 @@ async def get_event_publisher(
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
-   
+
+@router.get(
+    "/v1/models",
+    summary="Models",
+    dependencies=[Depends(authenticate)]
+)
+async def get_models(
+) -> ModelList:
+    return ModelList(object="list", data=[
+        ModelData(
+            id=loader.get_settings().model_name,
+            object="model",
+            owned_by="aiserver",
+            permissions=[],
+        )
+        for loader in _model_loaders.values()
+    ])
+
 @router.post(
     "/v1/completions",
     summary="Completion",
@@ -298,6 +358,7 @@ async def health_check():
         str,
     ],
     responses={
+        **_responses,
         "200": {
             "description": "Successful Response",
             "content": {
@@ -357,7 +418,10 @@ async def create_completion(
 @router.post(
     "/v1/embeddings",
     summary="Embedding",
-    dependencies=[Depends(authenticate)]
+    dependencies=[Depends(authenticate)],
+    responses={
+        **_responses,
+    }
 )
 async def create_embedding(
     body: CreateEmbeddingRequest,
@@ -376,6 +440,7 @@ async def create_embedding(
     dependencies=[Depends(authenticate)],
     response_model=Union[CreateChatCompletionResponse, str],
     responses={
+        **_responses,
         "200": {
             "description": "Successful Response",
             "content": {
@@ -506,7 +571,10 @@ async def create_chat_completion(
 @router.post(
     "/extras/tokenize",
     summary="Tokenize",
-    dependencies=[Depends(authenticate)]
+    dependencies=[Depends(authenticate)],
+    responses={
+        **_responses,
+    }
 )
 async def tokenize(
     body: TokenizeInputRequest
@@ -519,7 +587,10 @@ async def tokenize(
 @router.post(
     "/extras/tokenize/count",
     summary="Tokenize Count",
-    dependencies=[Depends(authenticate)]
+    dependencies=[Depends(authenticate)],
+    responses={
+        **_responses,
+    }
 )
 async def count_tokens(
     body: TokenizeInputRequest
@@ -532,7 +603,10 @@ async def count_tokens(
 @router.post(
     "/extras/detokenize",
     summary="Detokenize",
-    dependencies=[Depends(authenticate)]
+    dependencies=[Depends(authenticate)],
+    responses={
+        **_responses,
+    }
 )
 async def detokenize(
     body: DetokenizeInputRequest
@@ -545,7 +619,10 @@ async def detokenize(
 @router.post(
     "/v1/audio/transcriptions",
     summary="Transcription",
-    dependencies=[Depends(authenticate)]
+    dependencies=[Depends(authenticate)],
+    responses={
+        **_responses,
+    }
 )
 async def transcription(
     request: Request,
@@ -587,7 +664,10 @@ async def transcription(
 @router.post(
     "/v1/audio/translations",
     summary="Translation",
-    dependencies=[Depends(authenticate)]
+    dependencies=[Depends(authenticate)],
+    responses={
+        **_responses,
+    }
 )
 async def translation(
     request: Request,
@@ -626,7 +706,10 @@ async def translation(
 @router.post(
     "/v1/audio/speech",
     summary="Speech",
-    dependencies=[Depends(authenticate)]
+    dependencies=[Depends(authenticate)],
+    responses={
+        **_responses,
+    }
 )
 async def create_speech(
     request: Request,
@@ -661,7 +744,10 @@ async def create_speech(
     description="Creates an image given a prompt.",
     dependencies=[Depends(authenticate)],
     response_model=CreateImageResponse,
-    response_model_exclude_none=True
+    response_model_exclude_none=True,
+    responses={
+        **_responses,
+    }
 )
 async def create_image(
     request: Request,
@@ -694,7 +780,10 @@ async def create_image(
     description="Creates an edited or extended image given an original image and a prompt.",
     dependencies=[Depends(authenticate)],
     response_model=CreateImageResponse,
-    response_model_exclude_none=True
+    response_model_exclude_none=True,
+    responses={
+        **_responses,
+    }
 )
 async def edit_image(
     request: Request,
@@ -732,23 +821,3 @@ async def edit_image(
                 b64_json=utils.b64_str_from(image)
             ) for image in image_resp["images"]
         ])
-
-@router.get(
-    "/v1/models",
-    summary="Models",
-    dependencies=[Depends(authenticate)]
-)
-async def get_models(
-) -> ModelList:
-    return {
-        "object": "list",
-        "data": [
-            {
-                "id": loader.get_settings().model_name,
-                "object": "model",
-                "owned_by": "me",
-                "permissions": [],
-            }
-            for loader in _model_loaders.values()
-        ],
-    }
