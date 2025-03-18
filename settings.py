@@ -4,6 +4,7 @@ from typing import Annotated, Optional, List, Literal, Tuple, Type, Union, Dict
 
 from pydantic import Field, BaseModel
 from pydantic_settings import BaseSettings, YamlConfigSettingsSource, PydanticBaseSettingsSource, SettingsConfigDict
+import time
 
 # Disable warning for model and model_alias settings
 BaseSettings.model_config["protected_namespaces"] = ()
@@ -58,6 +59,10 @@ class ModelSettings(BaseModel):
     )
     model_path: str = Field(
         description="The path to the model."
+    )
+    created: int = Field(
+        default=int(time.time()),
+        description="The Unix timestamp (in seconds) when the model was created."
     )
     backend: Literal['llama', 'stablediffusion', 'whisper', 'piper']
 

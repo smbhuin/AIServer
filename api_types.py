@@ -433,6 +433,7 @@ class ModelData(BaseModel):
     id: str = Field(description="The model identifier, which can be referenced in the API endpoints.")
     object: Literal["model"] = Field(description="The object type, which is always `model`.")
     owned_by: str = Field(description="The organization that owns the model.")
+    created: int = Field(description="The Unix timestamp (in seconds) when the model was created.")
     permissions: List[str] = Field(description="The usage permission.")
 
 class ModelList(BaseModel):

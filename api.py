@@ -29,7 +29,7 @@ from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, PlainTextResponse
-from fastapi.exceptions import ValidationException, RequestValidationError
+from fastapi.exceptions import ValidationException, RequestValidationError, ResponseValidationError
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.utils import is_body_allowed_for_status_code
@@ -155,51 +155,17 @@ class AIServerRoute(APIRoute):
     def get_route_handler(
         self,
     ) -> Callable[[Request], Coroutine[None, None, Response]]:
-        """Defines custom route handler that catches exceptions and formats
-        in OpenAI style error response"""
+        """Defines custom route handler that calculates the request processing time"""
 
         original_route_handler = super().get_route_handler()
 
         async def custom_route_handler(request: Request) -> Response:
-            try:
-                start_sec = time.perf_counter()
-                response = await original_route_handler(request)
-                elapsed_time_ms = int((time.perf_counter() - start_sec) * 1000)
-                response.headers["openai-processing-ms"] = f"{elapsed_time_ms}"
-                return response
-            except HTTPException as exc:
-                headers = getattr(exc, "headers", None)
-                if not is_body_allowed_for_status_code(exc.status_code):
-                    return Response(status_code=exc.status_code, headers=headers)
-                error_types: Dict[int, str] = {
-                    400:"invalid_request_error",
-                    401:"authentication_error",
-                    404:"not_found_error"
-                }
-                err_msg = exc.detail
-                err_type = error_types.get(exc.status_code,"server_error")
-                err_code = exc.status_code
-            except RequestValidationError as exc:
-                headers = None
-                err_msg = "Your request was malformed or missing some required parameters."
-                err_type = "invalid_request_error"
-                err_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-            except Exception as exc:
-                headers = None
-                err_msg = "The server had an error while processing your request."
-                err_type = "server_error"
-                err_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-            error_message: ErrorMessage = {
-                "message": err_msg,
-                "type": err_type,
-                "param": None,
-                "code": str(err_code)
-            }
-            return JSONResponse(
-                content={"error":error_message},
-                status_code=err_code,
-                headers=headers
-            )
+            start_sec = time.perf_counter()
+            response = await original_route_handler(request)
+            elapsed_time_ms = int((time.perf_counter() - start_sec) * 1000)
+            response.headers["openai-processing-ms"] = f"{elapsed_time_ms}"
+            return response
+            
         return custom_route_handler
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> Response:
@@ -213,7 +179,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
     }
     error_message: ErrorMessage = {
         "message": exc.detail,
-        "type": error_types.get(exc.status_code,"server_error"),
+        "type": error_types.get(exc.status_code, "server_error"),
         "param": None,
         "code": str(exc.status_code),
     }
@@ -224,26 +190,80 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
 async def validation_exception_handler(
     request: Request, exc: ValidationException
 ) -> JSONResponse:
-    code = status.HTTP_422_UNPROCESSABLE_ENTITY if isinstance(exc, RequestValidationError) else status.HTTP_500_INTERNAL_SERVER_ERROR
+    if  isinstance(exc, RequestValidationError):
+        err_msg = "Your request was malformed or missing some required parameters."
+        err_type = "invalid_request_error"
+        err_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    elif isinstance(exc, ResponseValidationError):
+        err_msg = "The server had an error while processing your request."
+        err_type = "server_error"
+        err_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     error_message: ErrorMessage = {
-        "message": "Your request was malformed or missing some required parameters.",
-        "type": "invalid_request_error",
+        "message": err_msg,
+        "type": err_type,
         "param": None,
-        "code": str(code)
+        "code": str(err_code)
     }
     return JSONResponse(
         content={"error":error_message}, # "detail": jsonable_encoder(exc.errors())
-        status_code=code
+        status_code=err_code
     )
 
 _responses = {
-    404: {
+    400: {
         "model": ErrorResponse,
-        "description": "Item not found"
+        "description": "Item not found",
+        "content": {
+            "application/json": {
+                "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse",
+                    "example": {
+                        "error": {
+                            "message": "Item not found",
+                            "type": "invalid_request_error",
+                            "param": "",
+                            "code": "400"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    404: {
+        "description": "Item not found",
+        "content": {
+            "application/json": {
+                "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse",
+                    "example": {
+                        "error": {
+                            "message": "Item not found",
+                            "type": "not_found_error",
+                            "param": "",
+                            "code": "404"
+                        }
+                    }
+                }
+            }
+        }
     },
     422: {
-        "model": ErrorResponse,
-        "description": "Validation Error"
+        "description": "Validation Error",
+        "content": {
+            "application/json": {
+                "schema": {
+                    "$ref": "#/components/schemas/ErrorResponse",
+                    "example": {
+                        "error": {
+                            "message": "Your request was malformed or missing some required parameters.",
+                            "type": "invalid_request_error",
+                            "param": "",
+                            "code": "422"
+                        }
+                    }
+                }
+            }
+        }
     },
 }
 
@@ -271,13 +291,13 @@ def create_app(server_settings: ServerSettings, models_settings: List[ModelSetti
     middleware = [Middleware(RawContextMiddleware, plugins=(RequestIdPlugin(),))]
     app = FastAPI(
         middleware=middleware,
-        title="AI python server. Host your own AI models!🚀",
+        title="AIServer. Host your own AI models!",
         version="1.0.0",
         root_path=server_settings.root_path,
     )
 
-    # app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    # app.add_exception_handler(ValidationException, validation_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(ValidationException, validation_exception_handler)
 
     app.add_middleware(
         CORSMiddleware,
@@ -287,7 +307,7 @@ def create_app(server_settings: ServerSettings, models_settings: List[ModelSetti
         allow_headers=["*"],
     )
     
-    app.include_router(router)
+    app.include_router(router, responses=_responses)
 
     # mount files directory 
     app.mount("/files", StaticFiles(directory="files"), name="static")
@@ -327,14 +347,18 @@ async def get_event_publisher(
 
 
 # Health check endpoint
-@router.get("/health")
+@router.get(
+    "/health",
+    summary="Health status"
+)
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
 
 @router.get(
     "/v1/models",
-    summary="Models",
+    summary="List models",
+    description="Lists the currently available models, and provides basic information about each one such as the owner and availability.",
     dependencies=[Depends(authenticate)]
 )
 async def get_models(
@@ -344,10 +368,29 @@ async def get_models(
             id=loader.get_settings().model_name,
             object="model",
             owned_by="aiserver",
-            permissions=[],
+            created=loader.get_settings().created,
+            permissions=[]
         )
         for loader in _model_loaders.values()
     ])
+
+@router.get(
+    "/v1/models/{model}",
+    summary="Retrieve model",
+    description="Retrieves a model instance, providing basic information about the model such as the owner and permissioning.",
+    dependencies=[Depends(authenticate)]
+)
+async def get_models(
+    model: str
+) -> ModelData:
+    settings = _model_loaders[model].get_settings()
+    return ModelData(
+        id=settings.model_name,
+        object="model",
+        owned_by="aiserver",
+        created=settings.created,
+        permissions=[]
+    )
 
 @router.post(
     "/v1/completions",
@@ -358,8 +401,7 @@ async def get_models(
         str,
     ],
     responses={
-        **_responses,
-        "200": {
+        200: {
             "description": "Successful Response",
             "content": {
                 "application/json": {
@@ -418,10 +460,7 @@ async def create_completion(
 @router.post(
     "/v1/embeddings",
     summary="Embedding",
-    dependencies=[Depends(authenticate)],
-    responses={
-        **_responses,
-    }
+    dependencies=[Depends(authenticate)]
 )
 async def create_embedding(
     body: CreateEmbeddingRequest,
@@ -440,8 +479,7 @@ async def create_embedding(
     dependencies=[Depends(authenticate)],
     response_model=Union[CreateChatCompletionResponse, str],
     responses={
-        **_responses,
-        "200": {
+        200: {
             "description": "Successful Response",
             "content": {
                 "application/json": {
@@ -571,10 +609,7 @@ async def create_chat_completion(
 @router.post(
     "/extras/tokenize",
     summary="Tokenize",
-    dependencies=[Depends(authenticate)],
-    responses={
-        **_responses,
-    }
+    dependencies=[Depends(authenticate)]
 )
 async def tokenize(
     body: TokenizeInputRequest
@@ -587,10 +622,7 @@ async def tokenize(
 @router.post(
     "/extras/tokenize/count",
     summary="Tokenize Count",
-    dependencies=[Depends(authenticate)],
-    responses={
-        **_responses,
-    }
+    dependencies=[Depends(authenticate)]
 )
 async def count_tokens(
     body: TokenizeInputRequest
@@ -603,10 +635,7 @@ async def count_tokens(
 @router.post(
     "/extras/detokenize",
     summary="Detokenize",
-    dependencies=[Depends(authenticate)],
-    responses={
-        **_responses,
-    }
+    dependencies=[Depends(authenticate)]
 )
 async def detokenize(
     body: DetokenizeInputRequest
@@ -619,10 +648,7 @@ async def detokenize(
 @router.post(
     "/v1/audio/transcriptions",
     summary="Transcription",
-    dependencies=[Depends(authenticate)],
-    responses={
-        **_responses,
-    }
+    dependencies=[Depends(authenticate)]
 )
 async def transcription(
     request: Request,
@@ -664,10 +690,7 @@ async def transcription(
 @router.post(
     "/v1/audio/translations",
     summary="Translation",
-    dependencies=[Depends(authenticate)],
-    responses={
-        **_responses,
-    }
+    dependencies=[Depends(authenticate)]
 )
 async def translation(
     request: Request,
@@ -708,7 +731,27 @@ async def translation(
     summary="Speech",
     dependencies=[Depends(authenticate)],
     responses={
-        **_responses,
+        200: {
+            "description": "Successful Response",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/CreateSpeechResponse"
+                            }
+                        ],
+                        "title": "Completion response, when stream=False",
+                    }
+                },
+                "audio/mpeg": {},
+                "audio/opus": {},
+                "audio/aac": {},
+                "audio/flac": {},
+                "audio/wav": {},
+                "audio/pcm": {}
+            },
+        }
     }
 )
 async def create_speech(
@@ -744,10 +787,7 @@ async def create_speech(
     description="Creates an image given a prompt.",
     dependencies=[Depends(authenticate)],
     response_model=CreateImageResponse,
-    response_model_exclude_none=True,
-    responses={
-        **_responses,
-    }
+    response_model_exclude_none=True
 )
 async def create_image(
     request: Request,
@@ -780,10 +820,7 @@ async def create_image(
     description="Creates an edited or extended image given an original image and a prompt.",
     dependencies=[Depends(authenticate)],
     response_model=CreateImageResponse,
-    response_model_exclude_none=True,
-    responses={
-        **_responses,
-    }
+    response_model_exclude_none=True
 )
 async def edit_image(
     request: Request,
