@@ -48,7 +48,7 @@ class ServerSettings(BaseModel):
         default="files",
         description="The user files storage path.",
     )
-    public_host_url: str = Field(
+    public_host_url: Optional[str] = Field(
         default=None,
         description="The public host url for the server.",
     )
@@ -255,7 +255,7 @@ class PiperModelSettings(ModelSettings):
         default=None,
         description="The path to the model config to use for tts."
     )
-    use_cuda: Optional[bool] = Field(
+    use_cuda: bool = Field(
         default=False,
         description="Use nvidia cuda to generate audio.",
     )

@@ -226,6 +226,7 @@ class ChatCompletionRequestResponseFormat(TypedDict):
     ]  # https://docs.endpoints.anyscale.com/guides/json_mode/
 
 class CreateChatCompletionRequest(BaseModel):
+    model: str = model_field
     messages: List[ChatCompletionRequestMessage] = Field(
         description="A list of messages to generate completions for."
     )
@@ -273,7 +274,6 @@ class CreateChatCompletionRequest(BaseModel):
     )
 
     # ignored or currently unsupported
-    model: Optional[str] = model_field
     n: Optional[int] = 1
     user: Optional[str] = Field(None)
 
@@ -492,17 +492,18 @@ class CreateImageGenerationRequest(BaseModel):
     prompt: str = Field(
         description="The prompt to generate image for."
     )
-    model: str = Field(
+    model: Optional[str] = Field(
+        default=None,
         description="The model to use for generating image."
     )
-    size: Optional[str] = Field(default="512x512", description="The size of the image to be generated in pixels.") 
-    quality: Optional[Literal['standard','hd']] = Field(default="standard", description="The quality of the image to be generated.")
-    response_format: Optional[Literal['url','b64_json']] = Field(default="url", description="The response format. Valid values are 'url' or 'b64_json'.")
-    n: Optional[int] = Field(default=1, ge=1, le=10, description="The number of images to generate. 1-10")
-    style: Optional[Literal['vivid','natural']] = Field(default="vivid", description="The image style. 'vivid' or 'natural'")
+    size: str = Field(default="512x512", description="The size of the image to be generated in pixels.") 
+    quality: Literal['standard','hd'] = Field(default="standard", description="The quality of the image to be generated.")
+    response_format: Literal['url','b64_json'] = Field(default="url", description="The response format. Valid values are 'url' or 'b64_json'.")
+    n: int = Field(default=1, ge=1, le=10, description="The number of images to generate. 1-10")
+    style: Literal['vivid','natural'] = Field(default="vivid", description="The image style. 'vivid' or 'natural'")
     user: Optional[str] = Field(default=None, description="A unique identifier representing your end-user, which can help monitor and detect abuse. Unimplemented.")
     # Extra
-    upscale_factor: Optional[int] = Field(default=1, ge=1, le=10, description="The image upscaling factor. 1-10")
+    upscale_factor: int = Field(default=1, ge=1, le=3, description="The image upscaling factor. 1-3")
 
     model_config = {
         "json_schema_extra": {
@@ -575,27 +576,26 @@ class CreateSpeechRequest(BaseModel):
     model: str = Field(
         description="The model to use for generating audio from text."
     )
-    input: str = Field(
+    input: Optional[str] = Field(
         default=None,
         description="The text to generate audio for. The maximum length is 4096 characters."
     )
     voice: str = Field(
-        default=None,
         description="The voice to use when generating the audio."
     )
-    speed: Optional[float] = Field(
+    speed: float = Field(
         default=1.0,
         description="The speed of the generated audio. Select a value from 0.25 to 4.0. 1.0 is the default."
     )
-    response_format: Optional[Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]] = Field(
+    response_format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"] = Field(
         default="mp3",
         description="The format to audio in. Supported formats are mp3, opus, aac, flac, wav, and pcm."
     )
-    response_type: Optional[Literal["content", "url"]] = Field(
+    response_type: Literal["content", "url"] = Field(
         default="content",
         description="The file url or file content."
     )
-    stream: Optional[bool] = stream_field
+    stream: bool = stream_field
 
     model_config = {
         "json_schema_extra": {

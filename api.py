@@ -205,7 +205,7 @@ async def validation_exception_handler(
         "code": str(err_code)
     }
     return JSONResponse(
-        content={"error":error_message}, # "detail": jsonable_encoder(exc.errors())
+        content={"error":error_message, "detail": jsonable_encoder(exc.errors())},
         status_code=err_code
     )
 
@@ -297,7 +297,8 @@ def create_app(server_settings: ServerSettings, models_settings: List[ModelSetti
     )
 
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    app.add_exception_handler(ValidationException, validation_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(ResponseValidationError, validation_exception_handler)
 
     app.add_middleware(
         CORSMiddleware,
@@ -828,13 +829,14 @@ async def edit_image(
     prompt: Annotated[str, Form(
         description="The prompt to generate image for."
     )],
-    mask: Annotated[Optional[bytes], File(description="An additional image whose fully transparent areas (e.g. where alpha is zero) indicate where image should be edited. Must be a valid PNG file, less than 4MB, and have the same dimensions as image.")] = None,
     model: Annotated[Optional[str], Form(
         description="The model to use for generating image."
     )] = None,
-    size: Annotated[Optional[str], Form(description="The size of the image to be generated in pixels.")] = "512x512",
-    response_format: Annotated[Optional[Literal['url','b64_json']], Form(description="The response format. Valid values are 'url' or 'b64_json'.")] = "url",
-    n: Annotated[Optional[int], Form(ge=1, le=10, description="The number of images to generate. 1-10")] = 1,
+    mask: Annotated[Optional[bytes], File(description="An additional image whose fully transparent areas (e.g. where alpha is zero) indicate where image should be edited. Must be a valid PNG file, less than 4MB, and have the same dimensions as image.")] = None,
+    size: Annotated[str, Form(description="The size of the image to be generated in pixels.")] = "512x512",
+    response_format: Annotated[Literal['url','b64_json'], Form(description="The response format. Valid values are 'url' or 'b64_json'.")] = "url",
+    n: Annotated[int, Form(ge=1, le=10, description="The number of images to generate. 1-10")] = 1,
+    upscale_factor: Annotated[int, Form(ge=1, le=3, description="The image upscaling factor. 1-3")] = 1,
     user: Annotated[Optional[str], Form()] = None,
 ) -> CreateImageResponse:
     created_at = int(time.time())
@@ -846,7 +848,8 @@ async def edit_image(
         "prompt": prompt,
         "batch_count": n,
         "width": int(width),
-        "height": int(height)
+        "height": int(height),
+        "upscale_factor": upscale_factor
     }
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)

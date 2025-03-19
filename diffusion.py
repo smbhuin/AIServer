@@ -24,8 +24,8 @@ class StableDiffusionWorker(ModelWorker):
             prompt=request["prompt"],
             width=request["width"],
             height=request["height"],
-            batch_count=request.get("batch_count",1),
-            upscale_factor=request.get("upscale_factor",1)
+            batch_count=request["batch_count"],
+            upscale_factor=request["upscale_factor"]
         )
         return {"images": imgs}
 
@@ -43,7 +43,8 @@ class StableDiffusionWorker(ModelWorker):
             prompt=request["prompt"],
             width=request["width"],
             height=request["height"],
-            batch_count=request["batch_count"]
+            batch_count=request["batch_count"],
+            upscale_factor=request["upscale_factor"]
         )
         return {"images": imgs}
 

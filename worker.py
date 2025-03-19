@@ -13,18 +13,18 @@ from api_types import (
 
 class TextToImageRequest(TypedDict):
     prompt: str
-    width: Optional[int]
-    height: Optional[int]
-    batch_count: Optional[int]
-    upscale_factor: Optional[int]
+    width: int
+    height: int
+    batch_count: int
+    upscale_factor: int
 
 class ImageToImageRequest(TypedDict):
     image: bytes
     mask_image: Optional[bytes]
     prompt: str
-    width: Optional[int]
-    height: Optional[int]
-    batch_count: Optional[int]
+    width: int
+    height: int
+    batch_count: int
 
 class ImageResponse(TypedDict):
     images: List[Image]
