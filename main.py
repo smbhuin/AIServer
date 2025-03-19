@@ -17,7 +17,7 @@ def main():
     uvicorn.run(
         app,
         host=server_settings.host,
-        port=int(server_settings.port),
+        port=server_settings.port,
         ssl_keyfile=server_settings.ssl_keyfile,
         ssl_certfile=server_settings.ssl_certfile,
         timeout_keep_alive=300
