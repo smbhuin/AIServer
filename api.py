@@ -71,6 +71,17 @@ from worker import ModelWorker, ImageToImageRequest, TextToImageRequest, ImageRe
 from loader import ModelWorkerLoader
 import utils
 
+class ErrorMessage(TypedDict):
+    """OpenAI style error response"""
+
+    message: str
+    type: str
+    param: Optional[str]
+    code: Optional[str]
+
+class ErrorResponse(TypedDict):
+    error: ErrorMessage
+
 # Setup Bearer authentication scheme
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -101,7 +112,12 @@ def get_model_loader(requested_model: str, backend: str, voice: Optional[str] = 
         if len(loaders) == 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No suitable model found for the request.",
+                detail={ # type: ErrorMessage
+                    "message": "No suitable model found for the request.",
+                    "type": "invalid_request_error",
+                    "param": None,
+                    "code": "invalid_request_error"
+                }
             )
         return loaders[0]
     if voice is not None:
@@ -109,7 +125,12 @@ def get_model_loader(requested_model: str, backend: str, voice: Optional[str] = 
     if requested_model not in _model_loaders:
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"The model `{requested_model}` does not exist.",
+                detail={ # type: ErrorMessage
+                    "message": f"The model `{requested_model}` does not exist.",
+                    "type": "invalid_request_error",
+                    "param": "model",
+                    "code": "invalid_request_error"
+                }
             )
     return _model_loaders[requested_model]
 
@@ -135,19 +156,13 @@ async def authenticate(
     # raise http error 401
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid API key",
+        detail={ # type: ErrorMessage
+            "message": "Incorrect API key provided.",
+            "type": "invalid_request_error",
+            "param": None,
+            "code": "invalid_api_key"
+        },
     )
-
-class ErrorMessage(TypedDict):
-    """OpenAI style error response"""
-
-    message: str
-    type: str
-    param: Optional[str]
-    code: Optional[str]
-
-class ErrorResponse(TypedDict):
-    error: ErrorMessage
 
 class AIServerRoute(APIRoute):
     """Custom APIRoute that handles application errors and exceptions"""
@@ -172,17 +187,16 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
     headers = getattr(exc, "headers", None)
     if not is_body_allowed_for_status_code(exc.status_code):
         return Response(status_code=exc.status_code, headers=headers)
-    error_types: Dict[int, str] = {
-        400:"invalid_request_error",
-        401:"authentication_error",
-        404:"not_found_error"
-    }
-    error_message: ErrorMessage = {
-        "message": exc.detail,
-        "type": error_types.get(exc.status_code, "server_error"),
-        "param": None,
-        "code": str(exc.status_code),
-    }
+    error_message: ErrorMessage = None
+    if isinstance(exc.detail, dict):
+        error_message = exc.detail
+    else:
+        error_message: ErrorMessage = {
+            "message": exc.detail,
+            "type": "server_error",
+            "param": None,
+            "code": "server_error"
+        }
     return JSONResponse(
         {"error": error_message}, status_code=exc.status_code, headers=headers
     )
@@ -190,23 +204,27 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
 async def validation_exception_handler(
     request: Request, exc: ValidationException
 ) -> JSONResponse:
+    error_message: ErrorMessage = None
+    error_code = None
     if  isinstance(exc, RequestValidationError):
-        err_msg = "Your request was malformed or missing some required parameters."
-        err_type = "invalid_request_error"
-        err_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+        error_message = {
+            "message": "Your request was malformed or missing some required parameters.",
+            "type": "invalid_request_error",
+            "param": None,
+            "code": "validation_error"
+        }
+        error_code = status.HTTP_422_UNPROCESSABLE_ENTITY
     elif isinstance(exc, ResponseValidationError):
-        err_msg = "The server had an error while processing your request."
-        err_type = "server_error"
-        err_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-    error_message: ErrorMessage = {
-        "message": err_msg,
-        "type": err_type,
-        "param": None,
-        "code": str(err_code)
-    }
+        error_message = {
+            "message": "The server had an error while processing your request.",
+            "type": "server_error",
+            "param": None,
+            "code": "server_error"
+        }
+        error_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     return JSONResponse(
         content={"error":error_message, "detail": jsonable_encoder(exc.errors())},
-        status_code=err_code
+        status_code=error_code
     )
 
 _responses = {
@@ -222,7 +240,7 @@ _responses = {
                             "message": "Item not found",
                             "type": "invalid_request_error",
                             "param": "",
-                            "code": "400"
+                            "code": "invalid_request_error"
                         }
                     }
                 }
@@ -238,9 +256,9 @@ _responses = {
                     "example": {
                         "error": {
                             "message": "Item not found",
-                            "type": "not_found_error",
+                            "type": "invalid_request_error",
                             "param": "",
-                            "code": "404"
+                            "code": "not_found_error"
                         }
                     }
                 }
@@ -258,7 +276,7 @@ _responses = {
                             "message": "Your request was malformed or missing some required parameters.",
                             "type": "invalid_request_error",
                             "param": "",
-                            "code": "422"
+                            "code": "validation_error"
                         }
                     }
                 }
@@ -274,7 +292,12 @@ async def check_connection(request: Request):
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Client closed request",
+            detail={
+                "message": "Connection is terminated by client.",
+                "type": "invalid_request_error",
+                "param": None,
+                "code": "invalid_request_error"
+            }
         )
 
 router = APIRouter(route_class=AIServerRoute) 
