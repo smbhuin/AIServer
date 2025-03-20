@@ -2,7 +2,8 @@ server:
   host: "127.0.0.1" # Listen address.
   port: 8000 # Listen port.
   public_host_url: "http://127.0.0.1:8000"
-
+  api_key: "demo"
+  
 models:
   - model_name: "mistral-7b" # The model name to use for generating completions.
     model_path: "models/mistral-7b-instruct-v0.2.Q4_K_M.gguf" # The path to the model to use for generating completions.
