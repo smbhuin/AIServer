@@ -1,6 +1,5 @@
 from io import BytesIO
 from pydub import AudioSegment
-import wave
 from typing import Generator
 
 from piper.voice import PiperVoice
