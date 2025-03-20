@@ -10,7 +10,6 @@ dependencies = [
     "sse-starlette>=2.2.1",
     "starlette-context>=0.3.6",
     "pydub>=0.25.1",
-    "pillow>=10.2.0",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,5 @@
 
-from typing import Any, List, Iterator, TypedDict, Optional, Literal, Union
-from PIL.Image import Image
+from typing import Any, List, Iterator, TypedDict, Optional, Literal, Union, Generator
 
 from api_types import (
     TokenizeInputRequest,
@@ -27,7 +26,7 @@ class ImageToImageRequest(TypedDict):
     batch_count: int
 
 class ImageResponse(TypedDict):
-    images: List[Image]
+    images: List[bytes]
 
 class SpeechToTextRequest(TypedDict):
     input_file: str
@@ -38,7 +37,6 @@ class SpeechToTextRequest(TypedDict):
 
 class TextToSpeechRequest(TypedDict):
     text: str
-    output_file: str
     format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
 
 class ModelWorker:
@@ -94,5 +92,5 @@ class ModelWorker:
     def text_to_speech(
         self,
         request: TextToSpeechRequest
-    ) -> None:
+    ) -> Generator[bytes, None, None]:
         pass

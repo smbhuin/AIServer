@@ -16,6 +16,12 @@ class StableDiffusionWorker(ModelWorker):
             self._current_model_settings
         )
 
+    def image_bytes(self, img: Image.Image) -> bytes:
+        with BytesIO() as output:
+            img.save(output, format="PNG")
+            res = output.getvalue()
+        return res
+    
     def text_to_image(
         self,
         request: TextToImageRequest
@@ -27,8 +33,9 @@ class StableDiffusionWorker(ModelWorker):
             batch_count=request["batch_count"],
             upscale_factor=request["upscale_factor"]
         )
-        return {"images": imgs}
+        return {"images": [self.image_bytes(img) for img in imgs]}
 
+    
     def image_to_image(
         self,
         request: ImageToImageRequest
@@ -46,7 +53,7 @@ class StableDiffusionWorker(ModelWorker):
             batch_count=request["batch_count"],
             upscale_factor=request["upscale_factor"]
         )
-        return {"images": imgs}
+        return {"images": [self.image_bytes(img) for img in imgs]}
 
     def free(self):
         if self._current_model:

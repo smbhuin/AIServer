@@ -25,5 +25,5 @@ def image_generation():
     print(response.data[0].url)
 
 
-# chat_completion()
+#chat_completion()
 image_generation()

@@ -5,11 +5,11 @@ import time
 import contextlib
 import os
 
-from typing import List, Optional, Union, Dict, Annotated, Callable, Coroutine, Any, Literal
+from typing import List, Optional, Union, Dict, Annotated, Callable, Coroutine, Any, Literal, Generator
 from typing_extensions import TypedDict
 
 import uuid
-
+import base64
 import anyio
 from anyio import Lock
 from anyio.streams.memory import MemoryObjectSendStream
@@ -28,7 +28,7 @@ from fastapi.routing import APIRoute
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.exceptions import ValidationException, RequestValidationError, ResponseValidationError
 
 from fastapi.encoders import jsonable_encoder
@@ -140,6 +140,14 @@ def get_hosted_file_url(file_name: str) -> str:
     files_host_url = server_settings.public_host_url if server_settings.public_host_url != None else f"http://{host}:{server_settings.port}"
     return files_host_url + f"/files/{file_name}"
 
+async def write_to_file(file_name: str, content: Union[bytes, Generator[bytes, None, None]]):
+    with open(f"files/{file_name}", "wb") as file:
+        if isinstance(content, bytes):
+            file.write(content)
+        else :
+            async for chunk in iterate_in_threadpool(content):
+                file.write(chunk)
+
 async def authenticate(
     settings: ServerSettings = Depends(get_server_settings),
     authorization: Optional[str] = Depends(bearer_scheme),
@@ -201,20 +209,22 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
         {"error": error_message}, status_code=exc.status_code, headers=headers
     )
 
-async def validation_exception_handler(
-    request: Request, exc: ValidationException
+async def app_exception_handler(
+    request: Request, exc: Exception
 ) -> JSONResponse:
     error_message: ErrorMessage = None
     error_code = None
-    if  isinstance(exc, RequestValidationError):
+    detail = None
+    if isinstance(exc, RequestValidationError):
         error_message = {
             "message": "Your request was malformed or missing some required parameters.",
             "type": "invalid_request_error",
             "param": None,
             "code": "validation_error"
         }
+        detail = jsonable_encoder(exc.errors())
         error_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-    elif isinstance(exc, ResponseValidationError):
+    else:
         error_message = {
             "message": "The server had an error while processing your request.",
             "type": "server_error",
@@ -223,7 +233,7 @@ async def validation_exception_handler(
         }
         error_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     return JSONResponse(
-        content={"error":error_message, "detail": jsonable_encoder(exc.errors())},
+        content={"error":error_message, "detail": detail},
         status_code=error_code
     )
 
@@ -320,8 +330,9 @@ def create_app(server_settings: ServerSettings, models_settings: List[ModelSetti
     )
 
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    app.add_exception_handler(ResponseValidationError, validation_exception_handler)
+    app.add_exception_handler(RequestValidationError, app_exception_handler)
+    app.add_exception_handler(ResponseValidationError, app_exception_handler)
+    app.add_exception_handler(Exception, app_exception_handler)
 
     app.add_middleware(
         CORSMiddleware,
@@ -782,11 +793,8 @@ async def create_speech(
     request: Request,
     body: CreateSpeechRequest
 ) -> CreateSpeechResponse:
-    file_name = f"{uuid.uuid4()}.{body.response_format}"
-    file_path = "files/" + file_name
     kwargs: TextToSpeechRequest = {
         "text": body.input,
-        "output_file": file_path,
         "format": body.response_format
     }
     media_types = {
@@ -800,10 +808,33 @@ async def create_speech(
     loader = get_model_loader(body.model, ModelBackend.piper, voice=body.voice)
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
-        await run_in_threadpool(worker.text_to_speech, request=kwargs)
-        if body.response_type == "content":
-            return FileResponse(file_path, media_type=media_types[body.response_format])
-        return CreateSpeechResponse(url=get_hosted_file_url(file_name))
+        audio_generator = await run_in_threadpool(worker.text_to_speech, request=kwargs)
+        if body.response_type == "url":
+            file_name = f"{uuid.uuid4()}.{body.response_format}"
+            await write_to_file(file_name, audio_generator)
+            return CreateSpeechResponse(url=get_hosted_file_url(file_name))
+        return StreamingResponse(audio_generator, media_type=media_types[body.response_format])
+        
+
+async def generated_images(images: List[bytes], response_format: str) -> List[GeneratedImage]:
+    data: List[GeneratedImage] = []
+    if response_format == "url":
+        for img_bytes in images:
+            file_name = f"{uuid.uuid4()}.png"
+            await write_to_file(file_name, img_bytes)
+            data.append(
+                GeneratedImage(
+                    url= get_hosted_file_url(file_name) 
+                )
+            )
+    else:
+        for img_bytes in images:
+            data.append(
+                GeneratedImage(
+                    b64_json=base64.b64encode(img_bytes).decode()
+                )
+            )
+    return data
 
 @router.post(
     "/v1/images/generations",
@@ -830,13 +861,9 @@ async def create_image(
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
         image_resp: ImageResponse = await run_in_threadpool(worker.text_to_image, request=kwargs)
-        return CreateImageResponse(created=created_at, data=[
-            GeneratedImage(
-                url= get_hosted_file_url(file_name=utils.save_image(image, path="files")) 
-            ) if body.response_format == "url" else GeneratedImage(
-                b64_json=utils.b64_str_from(image)
-            ) for image in image_resp["images"]
-        ])
+        gen_images = await generated_images(image_resp["images"], body.response_format)
+        return CreateImageResponse(created=created_at, data=gen_images)
+            
 
 @router.post(
     "/v1/images/edits",
@@ -877,10 +904,5 @@ async def edit_image(
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
         image_resp: ImageResponse = await run_in_threadpool(worker.image_to_image, request=kwargs)
-        return CreateImageResponse(created=created_at, data=[
-            GeneratedImage(
-                url= get_hosted_file_url(file_name=utils.save_image(image, path="files")) 
-            ) if response_format == "url" else GeneratedImage(
-                b64_json=utils.b64_str_from(image)
-            ) for image in image_resp["images"]
-        ])
+        gen_images = await generated_images(image_resp["images"], response_format)
+        return CreateImageResponse(created=created_at, data=gen_images)
