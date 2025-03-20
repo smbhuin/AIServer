@@ -120,8 +120,7 @@ Open `http://localhost:8000/docs` for OpenAPI docs.
 
 ```python
 from openai import OpenAI
-client = OpenAI()
-openai.api_base = 'http://localhost:8000'
+client = OpenAI(api_key="demo", base_url="http://localhost:8000/v1")
 
 completion = client.chat.completions.create(
   model="mistral-7b",
@@ -138,8 +137,7 @@ print(completion.choices[0].message)
 
 ```python
 from openai import OpenAI
-client = OpenAI()
-openai.api_base = 'http://localhost:8000'
+client = OpenAI(api_key="demo", base_url="http://localhost:8000/v1")
 
 response = client.images.generate(
     model="dreamshaper-8",
@@ -156,8 +154,7 @@ print(response.data[0].url)
 
 ```python
 from openai import OpenAI
-client = OpenAI()
-openai.api_base = 'http://localhost:8000'
+client = OpenAI(api_key="demo", base_url="http://localhost:8000/v1")
 
 audio_file= open("/path/to/file/audio.mp3", "rb")
 transcription = client.audio.transcriptions.create(
@@ -174,11 +171,11 @@ print(transcription.text)
 from pathlib import Path
 from openai import OpenAI
 
-client = OpenAI()
+client = OpenAI(api_key="demo", base_url="http://localhost:8000/v1")
 speech_file_path = Path(__file__).parent / "speech.mp3"
 response = client.audio.speech.create(
     model="tts-1",
-    voice="alloy",
+    voice="amy",
     input="Today is a wonderful day to build something people love!",
 )
 response.stream_to_file(speech_file_path)
