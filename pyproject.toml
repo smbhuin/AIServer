@@ -3,13 +3,14 @@ name = "aiserver"
 version = "0.1.0"
 description = "AIServer. Host your own AI models!"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi[standard]>=0.115.8",
     "pydantic-settings>=2.8.0",
     "sse-starlette>=2.2.1",
     "starlette-context>=0.3.6",
     "pydub>=0.25.1",
+    "pillow>=10.2.0",
 ]
 
 [project.optional-dependencies]
