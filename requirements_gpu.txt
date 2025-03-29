@@ -3,3 +3,4 @@ pywhispercpp @ git+https://github.com/absadiki/pywhispercpp.git@main --config-se
 stable_diffusion_cpp_python --config-settings=cmake.args="-DSD_CUDA=ON"
 piper-tts
 onnxruntime-gpu
+coqui-tts

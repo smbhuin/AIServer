@@ -14,6 +14,8 @@ class ModelBackend:
     stable_diffusion = "stablediffusion"
     whisper = "whisper"
     piper = "piper"
+    coqui = "coqui"
+    vllm = "vllm"
 
 class ServerSettings(BaseModel):
     """Server settings used to configure the FastAPI and Uvicorn server."""
@@ -57,21 +59,20 @@ class ModelSettings(BaseModel):
     model_name: str = Field(
         description="The alias of the model to use as model name in APIs.",
     )
-    model_path: str = Field(
-        description="The path to the model."
-    )
     created: int = Field(
         default=int(time.time()),
         description="The Unix timestamp (in seconds) when the model was created."
     )
-    backend: Literal['llama', 'stablediffusion', 'whisper', 'piper']
+    backend: Literal['coqui', 'llama', 'stablediffusion', 'whisper', 'piper']
 
 class LlamaModelSettings(ModelSettings):
     """Model settings used to load a llama model."""
 
     backend: Literal['llama']
 
-    # Model Params
+    model_path: str = Field(
+        description="The path to the model."
+    )
     n_gpu_layers: int = Field(
         default=0,
         ge=-1,
@@ -238,7 +239,9 @@ class WhisperModelSettings(ModelSettings):
 
     backend: Literal['whisper']
 
-    # Model Params
+    model_path: str = Field(
+        description="The path to the model."
+    )
     n_threads: int = Field(
         default=max(multiprocessing.cpu_count() // 2, 1),
         ge=1,
@@ -250,10 +253,62 @@ class PiperModelSettings(ModelSettings):
 
     backend: Literal['piper']
 
-    # Model Params
+    model_path: str = Field(
+        description="The path to the model."
+    )
     model_config_path: Optional[str] = Field(
         default=None,
         description="The path to the model config to use for tts."
+    )
+    use_cuda: bool = Field(
+        default=False,
+        description="Use nvidia cuda to generate audio.",
+    )
+
+class CoquiModelSettings(ModelSettings):
+    """Model settings used to load a Coqui model."""
+
+    backend: Literal['coqui']
+
+    model_id: Optional[str] = Field(
+        default=None,
+        description="The Coqui TTS model name. Used to download the model."
+    )
+    model_path: Optional[str] = Field(
+        default=None,
+        description="The path to the model."
+    )
+    model_config_path: Optional[str] = Field(
+        default=None,
+        description="The path to the model config."
+    )
+    vocoder_id: Optional[str] = Field(
+        default=None,
+        description="The Coqui TTS vocoder name."
+    )
+    vocoder_path: Optional[str] = Field(
+        default=None,
+        description="The path to the vocoder to use for tts."
+    )
+    vocoder_config_path: Optional[str] = Field(
+        default=None,
+        description="The path to the vocoder config to use for tts."
+    )
+    encoder_path: Optional[str] = Field(
+        default=None,
+        description="The path to the encoder to use for tts."
+    )
+    encoder_config_path: Optional[str] = Field(
+        default=None,
+        description="The path to the encoder config to use for tts."
+    )
+    speakers_file_path: Optional[str] = Field(
+        default=None,
+        description="The path to the speakers to use for tts."
+    )
+    language_ids_file_path: Optional[str] = Field(
+        default=None,
+        description="The path to the language ids to use for tts."
     )
     use_cuda: bool = Field(
         default=False,
@@ -265,7 +320,9 @@ class StableDiffusionModelSettings(ModelSettings):
 
     backend: Literal['stablediffusion']
 
-    # Model Params
+    model_path: str = Field(
+        description="The path to the model."
+    )
     clip_l_path: str = Field(
         default="",
         description="The path to the clip_l."
@@ -356,7 +413,7 @@ class StableDiffusionModelSettings(ModelSettings):
     )
 
 ConfigModelSettings = Annotated[
-    Union[LlamaModelSettings, WhisperModelSettings, StableDiffusionModelSettings, PiperModelSettings],
+    Union[LlamaModelSettings, WhisperModelSettings, StableDiffusionModelSettings, PiperModelSettings, CoquiModelSettings],
     Field(discriminator="backend")]
 
 class ConfigFileSettings(BaseSettings):

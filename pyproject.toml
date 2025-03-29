@@ -11,6 +11,7 @@ dependencies = [
     "starlette-context>=0.3.6",
     "pydub>=0.25.1",
     "pillow>=10.2.0",
+    "pyyaml>=6.0.2",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +20,7 @@ cpu = [
     "piper-tts>=1.2.0",
     "pywhispercpp>=1.3.0",
     "stable-diffusion-cpp-python>=0.2.5",
+    "coqui-tts>=0.24.3",
 ]
 
 [dependency-groups]

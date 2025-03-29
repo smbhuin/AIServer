@@ -58,6 +58,9 @@ class ModelWorkerLoader:
         elif self.model_settings.backend == "piper":
             import piper_tts
             return piper_tts.PiperWorker(model=self.model_settings)
+        elif self.model_settings.backend == "coqui":
+            import coqui_tts
+            return coqui_tts.CoquiWorker(model=self.model_settings)
         else:
             raise ValueError("Model backend not found.")
 

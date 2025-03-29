@@ -37,6 +37,8 @@ class SpeechToTextRequest(TypedDict):
 
 class TextToSpeechRequest(TypedDict):
     text: str
+    speaker: Optional[str]
+    language: Optional[str]
     format: Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
 
 class ModelWorker:

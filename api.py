@@ -106,9 +106,9 @@ def set_models_settings(models_settings: List[ModelSettings]):
     for m in models_settings:
         _model_loaders[m.model_name] = ModelWorkerLoader(m)
 
-def get_model_loader(requested_model: str, backend: str, voice: Optional[str] = None) -> ModelWorkerLoader:
+def get_model_loader(requested_model: str, default_backend: str) -> ModelWorkerLoader:
     if requested_model == None:
-        loaders = [m for m in _model_loaders.values() if m.get_settings().backend == backend]
+        loaders = [m for m in _model_loaders.values() if m.get_settings().backend == default_backend]
         if len(loaders) == 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -120,8 +120,6 @@ def get_model_loader(requested_model: str, backend: str, voice: Optional[str] = 
                 }
             )
         return loaders[0]
-    if voice is not None:
-        requested_model = f"{requested_model}:{voice}"
     if requested_model not in _model_loaders:
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -795,7 +793,9 @@ async def create_speech(
 ) -> CreateSpeechResponse:
     kwargs: TextToSpeechRequest = {
         "text": body.input,
-        "format": body.response_format
+        "format": body.response_format,
+        "language": body.language,
+        "speaker": body.voice
     }
     media_types = {
         "mp3": "audio/mpeg",
@@ -805,7 +805,7 @@ async def create_speech(
         "wav": "audio/wav",
         "pcm": "audio/pcm"
     }
-    loader = get_model_loader(body.model, ModelBackend.piper, voice=body.voice)
+    loader = get_model_loader(body.model, ModelBackend.piper)
     async with contextlib.asynccontextmanager(loader.get_worker)() as worker:
         await check_connection(request)
         audio_generator = await run_in_threadpool(worker.text_to_speech, request=kwargs)

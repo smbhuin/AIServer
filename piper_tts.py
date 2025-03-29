@@ -21,7 +21,8 @@ class PiperWorker(ModelWorker):
             "aac": "adts",
             "pcm": "wav",
             "wav": "wav",
-            "flac": "flac"
+            "flac": "flac",
+            "opus": "opus"
         }
 
     def text_to_speech(self, request: TextToSpeechRequest) -> Generator[bytes, None, None]:

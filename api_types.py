@@ -580,6 +580,10 @@ class CreateSpeechRequest(BaseModel):
         default=None,
         description="The text to generate audio for. The maximum length is 4096 characters."
     )
+    language: Optional[str] = Field(
+        default=None,
+        description="The language of the text to generate audio for."
+    )
     voice: str = Field(
         description="The voice to use when generating the audio."
     )
